@@ -203,6 +203,52 @@ public class Project
         project.ProjectDirectory.CreateSubdirectory(@"Assets");
         project.ProjectDirectory.CreateSubdirectory(@"Library");
         project.ProjectDirectory.CreateSubdirectory(@"Packages");
+        
+        // Clean up old hot reload directories
+        CleanupHotReloadDirectories(project);
+    }
+
+    private static void CleanupHotReloadDirectories(Project project)
+    {
+        try
+        {
+            var tempDir = project.TempDirectory;
+            if (!tempDir.Exists) return;
+
+            // Find and delete old bin_hotreload_* directories
+            var hotReloadDirs = tempDir.GetDirectories("bin_hotreload_*");
+            foreach (var dir in hotReloadDirs)
+            {
+                try
+                {
+                    dir.Delete(recursive: true);
+                    Runtime.Debug.Log($"[HotReload] Cleaned up old hot reload directory: {dir.Name}");
+                }
+                catch (Exception ex)
+                {
+                    Runtime.Debug.LogWarning($"[HotReload] Failed to clean up directory {dir.Name}: {ex.Message}");
+                }
+            }
+
+            // Find and delete old obj_hotreload_* directories
+            var objHotReloadDirs = tempDir.GetDirectories("obj_hotreload_*");
+            foreach (var dir in objHotReloadDirs)
+            {
+                try
+                {
+                    dir.Delete(recursive: true);
+                    Runtime.Debug.Log($"[HotReload] Cleaned up old hot reload directory: {dir.Name}");
+                }
+                catch (Exception ex)
+                {
+                    Runtime.Debug.LogWarning($"[HotReload] Failed to clean up directory {dir.Name}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Runtime.Debug.LogWarning($"[HotReload] Failed to clean up hot reload directories: {ex.Message}");
+        }
     }
 
 
