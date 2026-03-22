@@ -184,14 +184,11 @@ public static partial class AssetDatabase
                 var dirInfo = new DirectoryInfo(dirPath);
                 currentDirectories.Add(dirPath);
                 
-                if (!LastWriteTimesCache.Instance.directoryLastWriteTimes.TryGetValue(dirPath, out var lastWriteTime)
-                    || !File.Exists(dirPath + ".meta")
-                    || dirInfo.LastWriteTime != lastWriteTime)
+                if (!LastWriteTimesCache.Instance.directoryLastWriteTimes.TryGetValue(dirPath, out var lastWriteTime))
                 {
-                    // New directory
+                    // New directory (not in cache)
                     Debug.Log("Directory Added: " + dirPath);
-                    lastWriteTime = dirInfo.LastWriteTime;
-                    LastWriteTimesCache.Instance.directoryLastWriteTimes[dirPath] = lastWriteTime;
+                    LastWriteTimesCache.Instance.directoryLastWriteTimes[dirPath] = dirInfo.LastWriteTime;
                     cacheModified = true;
                     directoryChanged = true;
                 }
@@ -199,8 +196,7 @@ public static partial class AssetDatabase
                 {
                     // Directory modified
                     Debug.Log("Directory Modified: " + dirPath);
-                    lastWriteTime = dirInfo.LastWriteTime;
-                    LastWriteTimesCache.Instance.directoryLastWriteTimes[dirPath] = lastWriteTime;
+                    LastWriteTimesCache.Instance.directoryLastWriteTimes[dirPath] = dirInfo.LastWriteTime;
                     cacheModified = true;
                     directoryChanged = true;
                 }
