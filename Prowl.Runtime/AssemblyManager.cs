@@ -75,24 +75,48 @@ public static class AssemblyManager
 
     public static Assembly? LoadExternalAssembly(string assemblyPath, bool isDependency)
     {
-        try
+        int attempts = 0;
+        const int MAX_ATTEMPTS = 3;
+        
+        while (attempts < MAX_ATTEMPTS)
         {
-            _externalAssemblyLoadContext ??= new ExternalAssemblyLoadContext();
-            Assembly asm = _externalAssemblyLoadContext.LoadFromAssemblyPath(assemblyPath);
+            attempts++;
+            
+            try
+            {
+                // Create new context if null or if previous context was unloading
+                if (_externalAssemblyLoadContext == null)
+                {
+                    _externalAssemblyLoadContext = new ExternalAssemblyLoadContext();
+                }
+                
+                Assembly asm = _externalAssemblyLoadContext.LoadFromAssemblyPath(assemblyPath);
 
-            if (isDependency)
-                _externalAssemblyLoadContext.AddDependency(assemblyPath);
+                if (isDependency)
+                    _externalAssemblyLoadContext.AddDependency(assemblyPath);
 
-            if (verboseLoadMessages)
-                Debug.LogSuccess($"Successfully loaded external assembly from {assemblyPath}");
+                Debug.LogSuccess($"[AssemblyManager] Successfully loaded external assembly from {assemblyPath}");
 
-            return asm;
+                return asm;
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("unloading") || ex.Message.Contains("unloaded"))
+            {
+                Debug.LogWarning($"[AssemblyManager] Context was unloading, creating new context (attempt {attempts}/{MAX_ATTEMPTS})");
+                _externalAssemblyLoadContext = null;
+                
+                // Force GC to clean up the old context
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(new AssemblyLoadException($"Failed to load External Assembly: {assemblyPath}", ex));
+                return null;
+            }
         }
-        catch (Exception ex)
-        {
-            Debug.LogException(new AssemblyLoadException($"Failed to load External Assembly: {assemblyPath}", ex));
-            return null;
-        }
+        
+        Debug.LogError($"[AssemblyManager] Failed to load assembly after {MAX_ATTEMPTS} attempts");
+        return null;
     }
 
 

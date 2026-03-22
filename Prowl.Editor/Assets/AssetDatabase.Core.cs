@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System.Diagnostics;
@@ -15,6 +15,7 @@ namespace Prowl.Editor.Assets;
 public class LastWriteTimesCache : ScriptableSingleton<LastWriteTimesCache>
 {
     public readonly Dictionary<string, DateTime> fileLastWriteTimes = [];
+    public readonly Dictionary<string, DateTime> directoryLastWriteTimes = [];
 }
 
 public static partial class AssetDatabase
@@ -127,8 +128,11 @@ public static partial class AssetDatabase
         RefreshTimer = 0f;
 
         HashSet<string> currentFiles = [];
+        HashSet<string> currentDirectories = [];
         List<string> toReimport = [];
         bool cacheModified = false;
+        bool directoryChanged = false;
+        
         foreach (var root in rootFolders)
         {
             var files = Directory.GetFiles(root.Item1.FullName, "*", SearchOption.AllDirectories)
@@ -172,6 +176,35 @@ public static partial class AssetDatabase
                     }
                 }
             }
+            
+            // Check for directory changes
+            var directories = Directory.GetDirectories(root.Item1.FullName, "*", SearchOption.AllDirectories);
+            foreach (var dirPath in directories)
+            {
+                var dirInfo = new DirectoryInfo(dirPath);
+                currentDirectories.Add(dirPath);
+                
+                if (!LastWriteTimesCache.Instance.directoryLastWriteTimes.TryGetValue(dirPath, out var lastWriteTime)
+                    || !File.Exists(dirPath + ".meta")
+                    || dirInfo.LastWriteTime != lastWriteTime)
+                {
+                    // New directory
+                    Debug.Log("Directory Added: " + dirPath);
+                    lastWriteTime = dirInfo.LastWriteTime;
+                    LastWriteTimesCache.Instance.directoryLastWriteTimes[dirPath] = lastWriteTime;
+                    cacheModified = true;
+                    directoryChanged = true;
+                }
+                else if (dirInfo.LastWriteTime != lastWriteTime)
+                {
+                    // Directory modified
+                    Debug.Log("Directory Modified: " + dirPath);
+                    lastWriteTime = dirInfo.LastWriteTime;
+                    LastWriteTimesCache.Instance.directoryLastWriteTimes[dirPath] = lastWriteTime;
+                    cacheModified = true;
+                    directoryChanged = true;
+                }
+            }
         }
 
         // Defer the Reimports untill after all Meta files are loaded/updated
@@ -210,21 +243,29 @@ public static partial class AssetDatabase
                         }
                     }
                 }
+            }
 
+            // Check for missing directories
+            var missingDirs = LastWriteTimesCache.Instance.directoryLastWriteTimes.Keys.Except(currentDirectories).ToList();
+            foreach (var dir in missingDirs)
+            {
+                LastWriteTimesCache.Instance.directoryLastWriteTimes.Remove(dir);
+                cacheModified = true;
+                directoryChanged = true;
             }
         }
 
+        
         // If anything changed update DirectoryCaches for Editor UI
-        if (forceCacheUpdate || cacheModified || toReimport.Count > 0)
+        if (forceCacheUpdate || cacheModified || toReimport.Count > 0 || directoryChanged)
         {
             foreach (var root in rootFolders)
                 root.Item2.Refresh();
             AssetCacheUpdated?.Invoke();
         }
 
-        if (cacheModified)
+        if (cacheModified || directoryChanged)
             LastWriteTimesCache.Instance.Save();
-
     }
 
     /// <summary>

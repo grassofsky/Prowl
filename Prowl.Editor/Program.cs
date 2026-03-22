@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System.Diagnostics;
@@ -190,20 +190,30 @@ public static class Program
                 Project active = Project.Active!;
 
                 // If we have already loaded external assemblies
-                // Unfortunately we need to restart the editor
-                // This is because we cannot unload loaded assemblies reliably, as user code or editor code may still be referencing said assemblies
+                Runtime.Debug.Log($"[HotReload] HasExternalAssemblies: {AssemblyManager.HasExternalAssemblies}");
+                Runtime.Debug.Log($"[HotReload] ExternalAssemblies count: {AssemblyManager.ExternalAssemblies.Count()}");
                 if (AssemblyManager.HasExternalAssemblies)
                 {
-                    // Save temp scene
-                    active.SaveTempScene();
+                    Runtime.Debug.Log("[HotReload] Trying hot reload...");
+                    // Try hot reload first
+                    if (AssemblyReplacer.TryHotReload())
+                    {
+                        Runtime.Debug.Log("[HotReload] Hot reload successful");
+                        return; // Success, no restart needed
+                    }
 
-                    // TODO: Save window layout
-                    // TODO: Save Undo/Redo stack
+                    // Hot reload failed, fallback to restart
+                    Runtime.Debug.Log("[HotReload] Hot reload failed, falling back to restart");
+                    active.SaveTempScene();
 
                     // Restart the editor
                     RestartEditor();
 
                     return;
+                }
+                else
+                {
+                    Runtime.Debug.Log("[HotReload] No external assemblies loaded, using normal reload");
                 }
 
                 SceneManager.StoreScene();

@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System.Reflection;
@@ -542,7 +542,15 @@ public class GameObjectEditor : ScriptedEditor
 
     private static MenuItemInfo GetAddComponentMenuItems()
     {
-        Type[] componentTypes = AppDomain.CurrentDomain.GetAssemblies()
+        // Only get types from external assemblies (user scripts) and engine assemblies
+        // This prevents duplicate entries after hot reload
+        var assemblies = AssemblyManager.ExternalAssemblies
+            .Concat(AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => a.FullName.StartsWith("Prowl.Runtime") || 
+                        a.FullName.StartsWith("Prowl.Editor") ||
+                        a.FullName.StartsWith("Prowl.Echo")));
+        
+        Type[] componentTypes = assemblies
                                       .SelectMany(assembly => assembly.GetTypes())
                                       .Where(type => type.IsSubclassOf(typeof(MonoBehaviour)) && !type.IsAbstract)
                                       .ToArray();
