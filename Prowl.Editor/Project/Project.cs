@@ -121,7 +121,8 @@ public class Project
 
 #warning TODO: Record last opened scene and try to open it
         SceneManager.InstantiateNewScene();
-        project.LoadTempScene();
+        // Note: LoadTempScene() is called after assemblies are loaded in CheckReloadingAssemblies()
+        // This ensures user script types are available during scene deserialization
 
         OnProjectChanged?.Invoke();
 

@@ -320,7 +320,8 @@ public static class Program
                     AssemblyMethodAttributeBase.FindAll();
                     OnAssemblyLoadAttribute.Invoke();
 
-                    SceneManager.RestoreScene();
+                    // Load temp scene after assemblies are loaded, so user script types are available
+                    Project.Active!.LoadTempScene();
                     SceneManager.ClearStoredScene();
                 }
             }

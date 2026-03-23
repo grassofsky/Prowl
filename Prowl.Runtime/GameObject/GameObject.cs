@@ -1158,6 +1158,7 @@ public class GameObject : EngineObject, ISerializable, ICloneExplicit
 
         EchoObject comps = value["Components"];
         _components = [];
+        _componentCache = new();
         foreach (EchoObject compTag in comps.List)
         {
             // Fallback for Missing Type - Handle hot reload scenario
@@ -1174,6 +1175,7 @@ public class GameObject : EngineObject, ISerializable, ICloneExplicit
                     MissingMonobehaviour missing = new MissingMonobehaviour();
                     missing.ComponentData = compTag;
                     _components.Add(missing);
+                    _componentCache.Add(typeof(MissingMonobehaviour), missing);
                     continue;
                 }
                 else if (oType == typeof(MissingMonobehaviour))
@@ -1200,6 +1202,7 @@ public class GameObject : EngineObject, ISerializable, ICloneExplicit
                             if (result is MonoBehaviour comp)
                             {
                                 _components.Add(comp);
+                                _componentCache.Add(oType, comp);
                                 continue;
                             }
                         }
@@ -1215,10 +1218,12 @@ public class GameObject : EngineObject, ISerializable, ICloneExplicit
             MonoBehaviour? component = Serializer.Deserialize<MonoBehaviour>(compTag, ctx);
             if (component == null) continue;
             _components.Add(component);
+            _componentCache.Add(component.GetType(), component);
         }
         // Attach all components
         foreach (MonoBehaviour comp in _components)
             comp.AttachToGameObject(this);
+        SortComponents();
     }
 
     /// <summary>
@@ -1242,6 +1247,7 @@ public class GameObject : EngineObject, ISerializable, ICloneExplicit
                 if (component != null)
                 {
                     _components.Add(component);
+                    _componentCache.Add(oType, component);
                 }
             }
         }
