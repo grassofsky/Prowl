@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System;
@@ -344,6 +344,7 @@ public class Transform : ICloneExplicit
             localAxis.Normalize();
             Quaternion q = Quaternion.AngleAxis(rad, localAxis);
             m_LocalRotation = Quaternion.NormalizeSafe(m_LocalRotation * q);
+            InvalidateTransformCache();
         }
     }
 
@@ -352,6 +353,7 @@ public class Transform : ICloneExplicit
         // Cheat using Matrix4x4.CreateLookAt
         Matrix4x4 m = Matrix4x4.CreateLookAt(position, worldPosition, worldUp);
         m_LocalRotation = Quaternion.NormalizeSafe(Quaternion.MatrixToQuaternion(m));
+        InvalidateTransformCache();
     }
 
 
