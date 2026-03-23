@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System;
@@ -33,8 +33,10 @@ public record DebugStackFrame(string fileName, int? line = null, int? column = n
     {
         string locSuffix = line != null ? column != null ? $"({line},{column})" : $"({line})" : "";
 
-        if (methodBase != null)
+        if (methodBase != null && methodBase.DeclaringType != null)
             return $"In {methodBase.DeclaringType.Name}.{methodBase.Name} at {fileName}{locSuffix}";
+        else if (methodBase != null)
+            return $"In {methodBase.Name} at {fileName}{locSuffix}";
         else
             return $"At {fileName}{locSuffix}";
     }

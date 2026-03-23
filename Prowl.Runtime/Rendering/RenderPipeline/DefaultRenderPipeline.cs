@@ -49,18 +49,48 @@ public class DefaultRenderPipeline : RenderPipeline
 
     private static void ValidateDefaults()
     {
-        s_quadMesh ??= Mesh.CreateQuad(Vector2.one);
-        s_gridMaterial ??= new Material(Application.AssetProvider.LoadAsset<Shader>("Defaults/Grid.shader"));
-        s_defaultMaterial ??= new Material(Application.AssetProvider.LoadAsset<Shader>("Defaults/Standard.shader"));
-        s_skybox ??= new Material(Application.AssetProvider.LoadAsset<Shader>("Defaults/ProceduralSky.shader"));
-        s_gizmo ??= new Material(Application.AssetProvider.LoadAsset<Shader>("Defaults/Gizmo.shader"));
-
-        if (s_skyDome == null)
+        // Check if resources need to be recreated (destroyed or null)
+        if (s_quadMesh == null || s_quadMesh.IsDestroyed)
+            s_quadMesh = Mesh.CreateQuad(Vector2.one);
+        
+        if (s_gridMaterial == null || s_gridMaterial.IsDestroyed)
         {
-            GameObject skyDomeModel = Application.AssetProvider.LoadAsset<GameObject>("Defaults/SkyDome.obj").Res;
-            MeshRenderer renderer = skyDomeModel.GetComponentInChildren<MeshRenderer>(true, true);
+            var shader = Application.AssetProvider.LoadAsset<Shader>("Defaults/Grid.shader");
+            if (shader.Res != null)
+                s_gridMaterial = new Material(shader);
+        }
+        
+        if (s_defaultMaterial == null || s_defaultMaterial.IsDestroyed)
+        {
+            var shader = Application.AssetProvider.LoadAsset<Shader>("Defaults/Standard.shader");
+            if (shader.Res != null)
+                s_defaultMaterial = new Material(shader);
+        }
+        
+        if (s_skybox == null || s_skybox.IsDestroyed)
+        {
+            var shader = Application.AssetProvider.LoadAsset<Shader>("Defaults/ProceduralSky.shader");
+            if (shader.Res != null)
+                s_skybox = new Material(shader);
+        }
+        
+        if (s_gizmo == null || s_gizmo.IsDestroyed)
+        {
+            var shader = Application.AssetProvider.LoadAsset<Shader>("Defaults/Gizmo.shader");
+            if (shader.Res != null)
+                s_gizmo = new Material(shader);
+        }
 
-            s_skyDome = renderer.Mesh.Res;
+        if (s_skyDome == null || s_skyDome.IsDestroyed)
+        {
+            var skyDomeRef = Application.AssetProvider.LoadAsset<GameObject>("Defaults/SkyDome.obj");
+            if (skyDomeRef.Res != null)
+            {
+                GameObject skyDomeModel = skyDomeRef.Res;
+                MeshRenderer? renderer = skyDomeModel.GetComponentInChildren<MeshRenderer>(true, true);
+                if (renderer != null && renderer.Mesh.Res != null)
+                    s_skyDome = renderer.Mesh.Res;
+            }
         }
     }
 
@@ -624,6 +654,9 @@ public class DefaultRenderPipeline : RenderPipeline
 
     private static void RenderSkybox(CommandBuffer buffer, CameraSnapshot css)
     {
+        if (s_skybox == null || s_skyDome == null)
+            return;
+        
         buffer.SetMaterial(s_skybox);
         buffer.SetMatrix("_Matrix_VP", (css.originView * css.projection).ToFloat());
         buffer.DrawSingle(s_skyDome);

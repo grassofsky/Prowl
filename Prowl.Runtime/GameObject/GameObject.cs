@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System;
@@ -1160,16 +1160,17 @@ public class GameObject : EngineObject, ISerializable, ICloneExplicit
         _components = [];
         foreach (EchoObject compTag in comps.List)
         {
-            // Fallback for Missing Type
+            // Fallback for Missing Type - Handle hot reload scenario
             EchoObject? typeProperty = compTag.Get("$type");
             // If the type is missing or string null/whitespace something is wrong, so just let the Deserializer handle it, maybe it knows what to do
             if (typeProperty != null && !string.IsNullOrWhiteSpace(typeProperty.StringValue))
             {
-                // Look for Monobehaviour Type
+                // Look for Monobehaviour Type using our custom resolver that handles hot reload
                 Type oType = RuntimeUtils.FindType(typeProperty.StringValue);
                 if (oType == null)
                 {
-                    Debug.LogWarning("Missing Monobehaviour Type: " + typeProperty.StringValue + " On " + Name);
+                    Debug.LogWarning($"Missing Monobehaviour Type: {typeProperty.StringValue} On {Name}");
+                    Debug.LogWarning($"Available External Assemblies: {string.Join(", ", AssemblyManager.ExternalAssemblies.Select(a => a.FullName))}");
                     MissingMonobehaviour missing = new MissingMonobehaviour();
                     missing.ComponentData = compTag;
                     _components.Add(missing);
@@ -1180,8 +1181,37 @@ public class GameObject : EngineObject, ISerializable, ICloneExplicit
                     HandleMissingComponent(compTag, ctx);
                     continue;
                 }
+                else
+                {
+                    // Type found - use reflection to call generic Deserialize method with our specific type
+                    try
+                    {
+                        // Get the Deserialize method with 2 parameters (EchoObject and SerializationContext)
+                        MethodInfo? deserializeMethod = typeof(Serializer).GetMethods()
+                            .FirstOrDefault(m => 
+                                m.Name == "Deserialize" && 
+                                m.IsGenericMethod && 
+                                m.GetParameters().Length == 2);
+                        
+                        if (deserializeMethod != null)
+                        {
+                            MethodInfo genericMethod = deserializeMethod.MakeGenericMethod(oType);
+                            object? result = genericMethod.Invoke(null, [compTag, ctx]);
+                            if (result is MonoBehaviour comp)
+                            {
+                                _components.Add(comp);
+                                continue;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"Failed to use reflection deserialization for {oType.Name}: {ex.Message}");
+                    }
+                }
             }
 
+            // Fallback to standard deserialization if reflection method failed
             MonoBehaviour? component = Serializer.Deserialize<MonoBehaviour>(compTag, ctx);
             if (component == null) continue;
             _components.Add(component);

@@ -1,4 +1,4 @@
-// This file is part of the Prowl Game Engine
+﻿// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System.Diagnostics;
@@ -221,20 +221,20 @@ public static class Program
 
                 try
                 {
-                    // Unload External Assemblies
-                    AssemblyManager.Unload();
+                    // Only unload if we have external assemblies loaded
+                    if (AssemblyManager.HasExternalAssemblies)
+                    {
+                        AssemblyManager.Unload();
+                    }
 
 
                     DirectoryInfo temp = active.TempDirectory;
                     DirectoryInfo bin = new DirectoryInfo(Path.Combine(temp.FullName, "bin"));
-                    DirectoryInfo project = new DirectoryInfo(Path.Combine(bin.FullName, Project.GameCSProjectName, "Editor"));
-                    DirectoryInfo editor = new DirectoryInfo(Path.Combine(bin.FullName, Project.EditorCSProjectName));
-
                     DirectoryInfo tmpProject = new DirectoryInfo(Path.Combine(temp.FullName, "obj", Project.GameCSProjectName));
                     DirectoryInfo tmpEditor = new DirectoryInfo(Path.Combine(temp.FullName, "obj", Project.EditorCSProjectName));
 
-                    string projectOutputPath = Path.Combine(project.FullName, Project.GameCSProjectName + ".dll");
-                    string editorOutputPath = Path.Combine(editor.FullName, Project.EditorCSProjectName + ".dll");
+                    string projectOutputPath = Path.Combine(bin.FullName, Project.GameCSProjectName + ".dll");
+                    string editorOutputPath = Path.Combine(bin.FullName, Project.EditorCSProjectName + ".dll");
 
                     // Delete everything under Temp/bin
                     int attempts = 1;
@@ -258,13 +258,38 @@ public static class Program
                         }
                     }
 
+                    // Also delete obj directory to avoid file locking issues
+                    DirectoryInfo objDir = new DirectoryInfo(Path.Combine(temp.FullName, "obj"));
+                    if (objDir.Exists)
+                    {
+                        attempts = 1;
+                        while (true)
+                        {
+                            try
+                            {
+                                Directory.Delete(objDir.FullName, true);
+                                break;
+                            }
+                            catch (Exception e)
+                            {
+                                Runtime.Debug.Log($"Error deleting temp/obj: '" + e.Message + $"' Retrying {attempts}/16");
+                                attempts++;
+                                if (attempts >= 16)
+                                    break;
+
+                                Thread.Sleep(1000);
+                                continue;
+                            }
+                        }
+                    }
+
                     bin.Create();
 
                     DotnetCompileOptions options = new DotnetCompileOptions()
                     {
                         isRelease = false,
                         isSelfContained = false,
-                        outputPath = project,
+                        outputPath = bin,
                         tempPath = tmpProject
                     };
 
@@ -276,7 +301,6 @@ public static class Program
                     {
                         Runtime.Debug.Log($"Successfully reloaded project assemblies");
 
-                        options.outputPath = editor;
                         options.tempPath = tmpEditor;
 
                         active.GenerateEditorProject(gameAssembly);

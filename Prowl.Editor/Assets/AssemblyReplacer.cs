@@ -51,6 +51,7 @@ public static class AssemblyReplacer
 
             Debug.Log("[HotReload] Step 4/5: Unloading assemblies...");
             AssemblyManager.Unload();
+            ClearTypeCache(); // Clear type cache after unloading old assemblies
             Debug.Log("[HotReload] Assemblies unloaded");
 
             Debug.Log("[HotReload] Step 5/5: Loading new assemblies...");
@@ -62,9 +63,28 @@ public static class AssemblyReplacer
             Debug.Log("[HotReload] New assemblies loaded");
 
             Debug.Log("[HotReload] Restoring scene from stored state...");
-            SceneManager.RestoreScene();
-            SceneManager.ClearStoredScene();
-            Debug.Log("[HotReload] Scene restored");
+            bool sceneRestored = false;
+            try
+            {
+                SceneManager.RestoreScene();
+                sceneRestored = true;
+            }
+            catch (Exception sceneEx)
+            {
+                Debug.LogException(new Exception("[HotReload] Failed to restore scene", sceneEx));
+            }
+            finally
+            {
+                if (sceneRestored)
+                {
+                    SceneManager.ClearStoredScene();
+                    Debug.Log("[HotReload] Scene restored");
+                }
+                else
+                {
+                    Debug.LogWarning("[HotReload] Scene restore failed, stored scene data preserved");
+                }
+            }
 
             RestoreStaticFields();
             Debug.Log("[HotReload] Static fields restored");

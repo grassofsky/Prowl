@@ -24,6 +24,9 @@ public struct DotnetCompileOptions()
     {
         List<string> args = ["build", $"\"{project.FullName}\""];
 
+        // Disable compiler server to avoid file locking issues
+        args.Add("/nodeReuse:false");
+
         if (outputPath != null)
         {
             args.Add("--output");

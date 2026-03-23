@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System;
@@ -72,27 +72,69 @@ public static class RuntimeUtils
 
     public static Type? FindType(string qualifiedTypeName)
     {
+        // First try direct resolution
         Type? t = Type.GetType(qualifiedTypeName);
+        if (t != null) return t;
 
-        if (t != null)
+        // Extract type name and assembly name from qualified name
+        string typeName = qualifiedTypeName;
+        string? assemblyName = null;
+        int commaIndex = qualifiedTypeName.IndexOf(',');
+        if (commaIndex > 0)
         {
-            return t;
+            typeName = qualifiedTypeName.Substring(0, commaIndex).Trim();
+            // Try to extract assembly name
+            var remaining = qualifiedTypeName.Substring(commaIndex + 1).Trim();
+            var parts = remaining.Split(',');
+            if (parts.Length > 0)
+            {
+                assemblyName = parts[0].Trim();
+            }
         }
-        else
+
+        // If we have an assembly name, try to find type in that assembly first
+        if (!string.IsNullOrEmpty(assemblyName))
         {
             foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                t = asm.GetType(qualifiedTypeName);
-                if (t != null)
-                    return t;
-
-                // If not found, try to find by name without namespace
-                t = asm.GetTypes().FirstOrDefault(t => t.Name.Equals(qualifiedTypeName, StringComparison.OrdinalIgnoreCase));
-                if (t != null)
-                    return t;
+                try
+                {
+                    if (asm.GetName().Name == assemblyName || 
+                        asm.FullName?.StartsWith(assemblyName) == true)
+                    {
+                        t = asm.GetType(typeName);
+                        if (t != null) return t;
+                        // Also try full qualified name
+                        t = asm.GetType(qualifiedTypeName);
+                        if (t != null) return t;
+                    }
+                }
+                catch { }
             }
-            return null;
         }
+
+        // Search external assemblies (user scripts)
+        foreach (Assembly asm in AssemblyManager.ExternalAssemblies)
+        {
+            try
+            {
+                t = asm.GetType(typeName);
+                if (t != null) return t;
+            }
+            catch { }
+        }
+
+        // Search all loaded assemblies
+        foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                t = asm.GetType(typeName);
+                if (t != null) return t;
+            }
+            catch { }
+        }
+        return null;
     }
 
     public static PropertyInfo GetInstanceProperty(this Type type, string name)
