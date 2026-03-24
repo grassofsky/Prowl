@@ -35,6 +35,8 @@ public class CullingResults
     {
         var cmd = CommandBufferPool.Get("DrawRenderers");
 
+        Vector3 cameraPosition = drawingSettings.SortingSettings.CameraPosition;
+
         foreach (var batch in _batches.Values)
         {
             if (batch.material == null || batch.material.Shader.IsAvailable == false)
@@ -53,10 +55,22 @@ public class CullingResults
                     bool passMatches = false;
                     for (int t = 0; t < drawingSettings.ShaderPassNames.Length; t++)
                     {
-                        if (pass.HasTag(drawingSettings.ShaderPassNames[t].Name))
+                        string tagName = drawingSettings.ShaderPassNames[t].Name;
+                        if (drawingSettings.ShaderPassValue != null)
                         {
-                            passMatches = true;
-                            break;
+                            if (pass.HasTag(tagName, drawingSettings.ShaderPassValue))
+                            {
+                                passMatches = true;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            if (pass.HasTag(tagName))
+                            {
+                                passMatches = true;
+                                break;
+                            }
                         }
                     }
                     if (!passMatches)
@@ -83,6 +97,16 @@ public class CullingResults
 
                     cmd.ApplyPropertyState(properties);
 
+                    if (drawingSettings.PerObjectData.HasFlag(PerObjectData.MotionVectors))
+                    {
+                        if (properties.TryGetInt("_ObjectID", out int instanceId))
+                        {
+                            TrackModelMatrix(cmd, instanceId, model);
+                        }
+                    }
+
+                    model.Translation -= cameraPosition;
+
                     cmd.SetMatrix("prowl_ObjectToWorld", model.ToFloat());
                     cmd.SetMatrix("prowl_WorldToObject", model.Invert().ToFloat());
                     cmd.SetColor("_MainColor", Color.white);
@@ -96,6 +120,45 @@ public class CullingResults
 
         context.ExecuteCommandBuffer(cmd);
         CommandBufferPool.Release(cmd);
+    }
+
+    private static readonly Dictionary<int, Matrix4x4> s_prevModelMatrices = new();
+    private static readonly HashSet<int> s_activeObjectIds = new();
+    private static int s_framesSinceLastCleanup = 0;
+    private const int CLEANUP_INTERVAL_FRAMES = 120;
+
+    private static void TrackModelMatrix(CommandBuffer buffer, int objectId, Matrix4x4 currentModel)
+    {
+        s_activeObjectIds.Add(objectId);
+
+        if (s_prevModelMatrices.TryGetValue(objectId, out Matrix4x4 prevModel))
+            buffer.SetMatrix("prowl_PrevObjectToWorld", prevModel.ToFloat());
+        else
+            buffer.SetMatrix("prowl_PrevObjectToWorld", currentModel.ToFloat());
+
+        s_prevModelMatrices[objectId] = currentModel;
+    }
+
+    public static void CleanupUnusedModelMatrices()
+    {
+        s_framesSinceLastCleanup++;
+
+        if (s_framesSinceLastCleanup < CLEANUP_INTERVAL_FRAMES)
+            return;
+
+        s_framesSinceLastCleanup = 0;
+
+        var unusedKeys = new List<int>();
+        foreach (var key in s_prevModelMatrices.Keys)
+        {
+            if (!s_activeObjectIds.Contains(key))
+                unusedKeys.Add(key);
+        }
+
+        foreach (int key in unusedKeys)
+            s_prevModelMatrices.Remove(key);
+
+        s_activeObjectIds.Clear();
     }
 
     private bool PassesFilter(Material material, FilteringSettings filtering)

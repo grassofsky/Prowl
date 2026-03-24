@@ -80,6 +80,7 @@ public struct RenderQueueRange
 public struct DrawingSettings
 {
     public ShaderTagId[] ShaderPassNames;
+    public string ShaderPassValue;
     public SortingSettings SortingSettings;
     public PerObjectData PerObjectData;
     public Material OverrideMaterial;
@@ -87,6 +88,7 @@ public struct DrawingSettings
     public DrawingSettings(ShaderTagId shaderPassName, SortingSettings sortingSettings)
     {
         ShaderPassNames = new[] { shaderPassName };
+        ShaderPassValue = null;
         SortingSettings = sortingSettings;
         PerObjectData = PerObjectData.None;
         OverrideMaterial = null;
@@ -95,6 +97,7 @@ public struct DrawingSettings
     public DrawingSettings(ShaderTagId[] shaderPassNames, SortingSettings sortingSettings)
     {
         ShaderPassNames = shaderPassNames;
+        ShaderPassValue = null;
         SortingSettings = sortingSettings;
         PerObjectData = PerObjectData.None;
         OverrideMaterial = null;
@@ -104,6 +107,11 @@ public struct DrawingSettings
     {
         if (index >= 0 && ShaderPassNames != null && index < ShaderPassNames.Length)
             ShaderPassNames[index] = shaderPassName;
+    }
+
+    public void SetShaderPassValue(string value)
+    {
+        ShaderPassValue = value;
     }
 
     public void SetOverrideMaterial(Material material)
