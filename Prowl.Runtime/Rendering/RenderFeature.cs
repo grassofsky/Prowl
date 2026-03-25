@@ -16,5 +16,5 @@ public abstract class RenderFeature : EngineObject
 
     public virtual bool Validate() => true;
 
-    public virtual void OnValidate() { }
+    public override void OnValidate() { }
 }

@@ -157,23 +157,41 @@ public abstract class ScriptableRenderer : IDisposable
 
     public void Render(Camera camera, SRPRenderingData data)
     {
-        _context.Setup(camera, data);
-
-        Setup(_context, ref data);
-
-        ExecuteFeatures(_context, ref data);
-
-        Execute(_context, ref data);
-
-        _context.Submit();
-
-        Cleanup(_context, ref data);
+        Render(camera, data, _context);
     }
 
-    public void Dispose()
+    public void Render(Camera camera, SRPRenderingData data, ScriptableRenderContext context)
+    {
+        if (camera == null)
+            throw new ArgumentNullException(nameof(camera));
+        if (data == null)
+            throw new ArgumentNullException(nameof(data));
+        if (context == null)
+            throw new ArgumentNullException(nameof(context));
+
+        context.Setup(camera, data);
+
+        Setup(context, ref data);
+
+        ExecuteFeatures(context, ref data);
+
+        Execute(context, ref data);
+
+        context.Submit();
+
+        Cleanup(context, ref data);
+    }
+
+    public virtual void Dispose()
     {
         ClearFeatures();
         ClearPasses();
         _context?.Dispose();
+    }
+
+    public virtual void CleanupCamera(Camera camera)
+    {
+        // Base implementation does nothing
+        // Derived classes can override to clean up camera-specific resources
     }
 }

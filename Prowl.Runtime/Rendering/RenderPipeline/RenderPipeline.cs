@@ -1,6 +1,7 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -30,6 +31,7 @@ public struct RenderBatch
 }
 
 
+[Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
 public abstract class RenderPipeline : EngineObject
 {
     private static readonly List<IRenderable> s_renderables = [];
@@ -40,6 +42,7 @@ public abstract class RenderPipeline : EngineObject
     private static readonly List<IRenderableLight> s_lights = [];
 
 
+    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static void AddRenderable(IRenderable renderable)
     {
         s_renderables.Add(renderable);
@@ -57,6 +60,7 @@ public abstract class RenderPipeline : EngineObject
     }
 
 
+    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static void AddLight(IRenderableLight light)
     {
         s_lights.Add(light);
@@ -88,17 +92,20 @@ public abstract class RenderPipeline : EngineObject
     }
 
 
+    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static IEnumerable<IRenderable> GetRenderables()
     {
         return s_renderables;
     }
 
 
+    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static List<IRenderableLight> GetLights()
     {
         return s_lights;
     }
 
 
+    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public abstract void Render(Camera camera, in RenderingData data);
 }

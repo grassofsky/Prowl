@@ -1,14 +1,16 @@
 // This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
+using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 using Prowl.Echo;
 using Prowl.Runtime.Rendering.Pipelines;
 
 namespace Prowl.Runtime.Rendering;
 
-public abstract class RenderPipelineAsset : EngineObject
+public abstract class RenderPipelineAsset : ScriptableObject
 {
     [SerializeField]
     protected List<RenderFeature> _renderFeatures = new();
@@ -16,10 +18,94 @@ public abstract class RenderPipelineAsset : EngineObject
     [SerializeField]
     protected PipelineSettings _settings = new();
 
+    public override void OnEnable()
+    {
+        base.OnEnable();
+
+        // Initialize fields if null (after deserialization)
+        _renderFeatures ??= new List<RenderFeature>();
+        _settings ??= new PipelineSettings();
+
+        // Initialize non-serialized fields
+        _rendererLock ??= new object();
+        _contextLock ??= new object();
+        _cameraContexts ??= new ConditionalWeakTable<Camera, ScriptableRenderContext>();
+    }
+
+    [SerializeIgnore]
+    private volatile ScriptableRenderer _sharedRenderer;
+
+    [SerializeIgnore]
+    private object _rendererLock;
+
+    // Per-camera context storage for thread safety
+    [SerializeIgnore]
+    private ConditionalWeakTable<Camera, ScriptableRenderContext> _cameraContexts;
+
+    [SerializeIgnore]
+    private object _contextLock;
+
     public IReadOnlyList<RenderFeature> RenderFeatures => _renderFeatures;
     public PipelineSettings Settings => _settings;
 
     public abstract ScriptableRenderer CreateRenderer();
+
+    public ScriptableRenderer GetSharedRenderer()
+    {
+        if (_sharedRenderer != null)
+            return _sharedRenderer;
+
+        lock (_rendererLock)
+        {
+            if (_sharedRenderer == null)
+            {
+                _sharedRenderer = CreateRenderer();
+                SetupRendererFeatures(_sharedRenderer);
+            }
+        }
+
+        return _sharedRenderer;
+    }
+
+    public ScriptableRenderContext GetContextForCamera(Camera camera)
+    {
+        if (camera == null)
+            throw new ArgumentNullException(nameof(camera));
+
+        // Fast path: check if context already exists
+        if (_cameraContexts.TryGetValue(camera, out var context))
+            return context;
+
+        // Slow path: create new context
+        lock (_contextLock)
+        {
+            // Double-check after acquiring lock
+            if (_cameraContexts.TryGetValue(camera, out context))
+                return context;
+
+            context = new ScriptableRenderContext();
+            _cameraContexts.Add(camera, context);
+            return context;
+        }
+    }
+
+    public void CleanupCameraContext(Camera camera)
+    {
+        if (camera == null)
+            return;
+
+        lock (_contextLock)
+        {
+            if (_cameraContexts.TryGetValue(camera, out var context))
+            {
+                context?.Dispose();
+                _cameraContexts.Remove(camera);
+            }
+        }
+
+        // Also cleanup renderer's camera-specific resources
+        _sharedRenderer?.CleanupCamera(camera);
+    }
 
     public virtual RenderPipeline CreatePipeline()
     {
@@ -68,6 +154,25 @@ public abstract class RenderPipelineAsset : EngineObject
             }
         }
     }
+
+    public void InvalidateSharedRenderer()
+    {
+        if (_sharedRenderer != null)
+        {
+            _sharedRenderer.Dispose();
+            _sharedRenderer = null;
+        }
+
+        // Cleanup all per-camera contexts
+        lock (_contextLock)
+        {
+            foreach (var kvp in _cameraContexts)
+            {
+                kvp.Value?.Dispose();
+            }
+            _cameraContexts.Clear();
+        }
+    }
 }
 
 public class PipelineSettings
@@ -87,8 +192,7 @@ internal class SRPRenderPipeline : RenderPipeline
     public SRPRenderPipeline(RenderPipelineAsset asset)
     {
         _asset = asset;
-        _renderer = asset.CreateRenderer();
-        _asset.SetupRendererFeatures(_renderer);
+        _renderer = asset.GetSharedRenderer();
     }
 
     public override void Render(Camera camera, in RenderingData data)
@@ -107,6 +211,8 @@ internal class SRPRenderPipeline : RenderPipeline
 
         srpData.CullingResults = cullingResults;
 
-        _renderer.Render(camera, srpData);
+        // Get per-camera context for thread safety
+        var context = _asset.GetContextForCamera(camera);
+        _renderer.Render(camera, srpData, context);
     }
 }
