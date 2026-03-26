@@ -69,7 +69,8 @@ public static class CreateAssetMenuHandler
         {
             file = new FileInfo(file.FullName.Replace(".scriptobj", "") + " New.scriptobj");
         }
-        Serializer.Serialize(obj).WriteToString(file);
+        var ctx = new SerializationContext(TypeMode.Aggressive);
+        Serializer.Serialize(type, obj, ctx).WriteToString(file);
         AssetDatabase.Update();
         AssetDatabase.Ping(file);
     }

@@ -99,7 +99,8 @@ public class SerializedAsset
 
     public void SetMainObject(EngineObject obj)
     {
-        if (obj == null) throw new Exception("Asset cannot be null");
+        if (obj == null)
+            throw new Exception("Asset cannot be null");
         if (SubAssets.Contains(obj)) throw new Exception("Asset already contains this object: " + obj);
         obj.FileID = 0;
         Main = obj;

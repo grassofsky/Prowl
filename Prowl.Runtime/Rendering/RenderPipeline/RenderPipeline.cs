@@ -42,7 +42,6 @@ public abstract class RenderPipeline : EngineObject
     private static readonly List<IRenderableLight> s_lights = [];
 
 
-    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static void AddRenderable(IRenderable renderable)
     {
         s_renderables.Add(renderable);
@@ -60,7 +59,6 @@ public abstract class RenderPipeline : EngineObject
     }
 
 
-    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static void AddLight(IRenderableLight light)
     {
         s_lights.Add(light);
@@ -92,14 +90,12 @@ public abstract class RenderPipeline : EngineObject
     }
 
 
-    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static IEnumerable<IRenderable> GetRenderables()
     {
         return s_renderables;
     }
 
 
-    [Obsolete("Use DefaultRenderPipelineAsset with ForwardRenderer instead. See Prowl.Runtime.Rendering namespace.")]
     public static List<IRenderableLight> GetLights()
     {
         return s_lights;
