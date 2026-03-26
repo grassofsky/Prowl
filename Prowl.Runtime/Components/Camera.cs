@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System;
@@ -52,6 +52,7 @@ public class Camera : MonoBehaviour
     public int Depth = -1;
 
     public AssetRef<RenderPipeline> Pipeline;
+    public AssetRef<RenderPipelineAsset> PipelineAsset;
     public AssetRef<RenderTexture> Target;
     public bool HDR = false;
     [Range(0, 2, true)]
@@ -61,6 +62,8 @@ public class Camera : MonoBehaviour
 
     [HideInInspector, SerializeIgnore]
     public DepthTextureMode DepthTextureMode = DepthTextureMode.None;
+
+    public bool IsSceneViewCamera { get; set; }
 
     private static WeakReference<Camera> s_mainCamera = new(null);
     public static Camera? Main
@@ -138,8 +141,47 @@ public class Camera : MonoBehaviour
 
     public void Render(in RenderingData? data = null)
     {
-        RenderPipeline pipeline = Pipeline.Res ?? DefaultRenderPipeline.Default;
-        pipeline.Render(this, data ?? new());
+        RenderingData renderData = data ?? new RenderingData();
+
+        if (PipelineAsset.Res != null)
+        {
+            var renderer = PipelineAsset.Res.GetSharedRenderer();
+            var context = PipelineAsset.Res.GetContextForCamera(this);
+            var srpData = SRPRenderingData.Create(this, IsSceneViewCamera);
+            srpData.DisplayGrid = renderData.DisplayGrid;
+            srpData.DisplayGizmo = renderData.DisplayGizmo;
+            srpData.GridMatrix = renderData.GridMatrix;
+            srpData.GridColor = renderData.GridColor;
+            srpData.GridSizes = renderData.GridSizes;
+
+            var cullingResults = CullingResults.PerformCulling(
+                srpData.CameraData,
+                RenderPipeline.GetRenderables(),
+                RenderPipeline.GetLights());
+
+            srpData.CullingResults = cullingResults;
+
+            renderer.Render(this, srpData, context);
+        }
+        else if (Pipeline.Res != null)
+        {
+            Pipeline.Res.Render(this, in renderData);
+        }
+        else
+        {
+            DefaultRenderPipeline.Default.Render(this, in renderData);
+        }
+    }
+
+    public override void OnDisable()
+    {
+        base.OnDisable();
+
+        // Cleanup camera-specific rendering resources
+        if (PipelineAsset.Res != null)
+        {
+            PipelineAsset.Res.CleanupCameraContext(this);
+        }
     }
 
     public Veldrid.Framebuffer UpdateRenderData()

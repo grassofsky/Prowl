@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System.Reflection;
@@ -26,7 +26,7 @@ public static class CreateAssetMenuHandler
             {
                 types = assembly.GetTypes();
                 foreach (var type in types)
-                    if (type != null && type.IsAssignableTo(typeof(ScriptableObject)))
+                    if (type != null && type.IsAssignableTo(typeof(EngineObject)))
                     {
                         var attribute = type.GetCustomAttribute<CreateAssetMenu>();
                         if (attribute != null)
@@ -69,7 +69,8 @@ public static class CreateAssetMenuHandler
         {
             file = new FileInfo(file.FullName.Replace(".scriptobj", "") + " New.scriptobj");
         }
-        Serializer.Serialize(obj).WriteToString(file);
+        var ctx = new SerializationContext(TypeMode.Aggressive);
+        Serializer.Serialize(type, obj, ctx).WriteToString(file);
         AssetDatabase.Update();
         AssetDatabase.Ping(file);
     }

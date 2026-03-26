@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using Prowl.Editor.Preferences;
@@ -155,7 +155,19 @@ public class SceneViewWindow : EditorWindow
                 }
             }
 
-        RenderPipeline pipeline = Cam.Pipeline.Res ?? DefaultRenderPipeline.Default;
+        RenderPipeline pipeline;
+        if (Cam.PipelineAsset.Res != null)
+        {
+            pipeline = Cam.PipelineAsset.Res.CreatePipeline();
+        }
+        else if (Cam.Pipeline.Res != null)
+        {
+            pipeline = Cam.Pipeline.Res;
+        }
+        else
+        {
+            pipeline = DefaultRenderPipeline.Default;
+        }
 
         Cam.Target = RenderTarget;
         pipeline.Render(Cam, data);
