@@ -301,6 +301,12 @@ public class Project
 
         options.AddReference(runtimeAssembly, true);
 
+        // Add NuGet packages from settings
+        foreach (var package in NuGetProjectSettings.Instance.Packages)
+        {
+            options.AddPackageReference(package.Name, package.Version);
+        }
+
         options.GenerateCSProject(
             GameCSProject,
             ProjectDirectory,
@@ -338,6 +344,12 @@ public class Project
         options.AddReference(runtimeAssembly, true);
         options.AddReference(gameAssembly, false);
         options.AddReference(typeof(Program).Assembly, false); // Just the editor assembly with none of its fancy references
+
+        // Add NuGet packages from settings
+        foreach (var package in NuGetProjectSettings.Instance.Packages)
+        {
+            options.AddPackageReference(package.Name, package.Version);
+        }
 
         options.GenerateCSProject(
             EditorCSProject,

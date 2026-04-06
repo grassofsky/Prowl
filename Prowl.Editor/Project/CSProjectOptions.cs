@@ -18,6 +18,9 @@ public struct CSProjectOptions()
     private Dictionary<string, string> _references = [];
     public IEnumerable<KeyValuePair<string, string>> AssemblyReferences => _references;
 
+    private Dictionary<string, string> _packageReferences = [];
+    public IEnumerable<KeyValuePair<string, string>> PackageReferences => _packageReferences;
+
     public bool AllowUnsafeCode = false;
     public bool EnableAOTCompatibility = false;
     public bool ReferencesArePrivate = false;
@@ -62,6 +65,26 @@ public struct CSProjectOptions()
             foreach (Assembly reference in GetNonstandardReferences(assembly))
                 AddReference(reference, false);
         }
+    }
+
+    public void AddPackageReference(string packageName, string version)
+    {
+        if (string.IsNullOrWhiteSpace(packageName))
+            throw new System.ArgumentException("Package name cannot be null or empty.", nameof(packageName));
+        if (string.IsNullOrWhiteSpace(version))
+            throw new System.ArgumentException("Version cannot be null or empty.", nameof(version));
+
+        _packageReferences[packageName] = version;
+    }
+
+    public bool RemovePackageReference(string packageName)
+    {
+        return _packageReferences.Remove(packageName);
+    }
+
+    public void ClearPackageReferences()
+    {
+        _packageReferences.Clear();
     }
 
     private static XElement FindOrCreate(XElement parent, XElement node)
@@ -163,6 +186,23 @@ public struct CSProjectOptions()
                 new XElement("Private", isPrivate)
             ))
         );
+
+        if (_packageReferences.Count > 0)
+        {
+            XElement packagesXML = FindOrCreate(projectXML,
+                new XElement("ItemGroup",
+                    new XAttribute("Label", "PackageReferences")
+                )
+            );
+
+            packagesXML.RemoveNodes();
+
+            packagesXML.Add(
+                _packageReferences.Select(x => new XElement("PackageReference",
+                    new XAttribute("Include", x.Key),
+                    new XAttribute("Version", x.Value)))
+            );
+        }
 
         projectDocument.Save(projectFile.FullName);
     }

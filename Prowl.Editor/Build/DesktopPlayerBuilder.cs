@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System.Reflection;
@@ -142,6 +142,12 @@ public class Desktop_Player : ProjectBuilder
 
         options.AddReference(runtimeAssembly, true);
         options.AddReference(gameLibrary);
+
+        // Add NuGet packages from settings
+        foreach (var package in NuGetProjectSettings.Instance.Packages)
+        {
+            options.AddPackageReference(package.Name, package.Version);
+        }
 
         options.GenerateCSProject(
             playerProj,

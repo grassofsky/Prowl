@@ -69,6 +69,13 @@ public static class ProjectCompiler
         if (!CheckForSDKInstallation("9.0"))
             return 1;
 
+        // First restore NuGet packages
+        int restoreResult = RestorePackages(project);
+        if (restoreResult != 0)
+        {
+            Runtime.Debug.LogWarning($"NuGet restore failed for {project.Name}, attempting build anyway...");
+        }
+
         ProcessStartInfo startInfo = new()
         {
             FileName = "dotnet",
@@ -87,6 +94,54 @@ public static class ProjectCompiler
 
         process.OutputDataReceived += LogCompilationMessage;
         process.ErrorDataReceived += LogCompilationMessage;
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        process.WaitForExit();
+
+        int exitCode = process.ExitCode;
+
+        process.Close();
+
+        return exitCode;
+    }
+
+
+    public static int RestorePackages(FileInfo project)
+    {
+        ProcessStartInfo startInfo = new()
+        {
+            FileName = "dotnet",
+            Arguments = $"restore \"{project.FullName}\"",
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+        };
+
+        Process process = new Process
+        {
+            StartInfo = startInfo
+        };
+
+        process.Start();
+
+        process.OutputDataReceived += (sender, args) =>
+        {
+            if (!string.IsNullOrWhiteSpace(args.Data))
+            {
+#if DEBUG
+                Runtime.Debug.Log($"[NuGet] {args.Data}");
+#endif
+            }
+        };
+        process.ErrorDataReceived += (sender, args) =>
+        {
+            if (!string.IsNullOrWhiteSpace(args.Data))
+            {
+                Runtime.Debug.LogWarning($"[NuGet] {args.Data}");
+            }
+        };
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
