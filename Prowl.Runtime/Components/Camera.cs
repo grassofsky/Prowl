@@ -8,6 +8,7 @@ using Prowl.Icons;
 using Prowl.Echo;
 using Prowl.Runtime.Rendering;
 using Prowl.Runtime.Rendering.Pipelines;
+using Veldrid;
 
 namespace Prowl.Runtime;
 
@@ -145,9 +146,22 @@ public class Camera : MonoBehaviour
 
         if (PipelineAsset.Res != null)
         {
+            // 1. Pre Cull - Call OnPreCull for all MonoBehaviour components on the camera
+            // This allows effects like MotionBlurEffect to set DepthTextureMode before CameraData is created
+            var components = GetComponents<MonoBehaviour>();
+            foreach (var component in components)
+            {
+                if (component != null && component.EnabledInHierarchy)
+                    component.OnPreCull(this);
+            }
+
+            Framebuffer cameraTarget = UpdateRenderData();
+
             var renderer = PipelineAsset.Res.GetSharedRenderer();
             var context = PipelineAsset.Res.GetContextForCamera(this);
+            
             var srpData = SRPRenderingData.Create(this, IsSceneViewCamera);
+            srpData.CameraTarget = cameraTarget;
             srpData.DisplayGrid = renderData.DisplayGrid;
             srpData.DisplayGizmo = renderData.DisplayGizmo;
             srpData.GridMatrix = renderData.GridMatrix;
@@ -160,6 +174,14 @@ public class Camera : MonoBehaviour
                 RenderPipeline.GetLights());
 
             srpData.CullingResults = cullingResults;
+            context.SetCullingResults(cullingResults);
+
+            // 2. Pre Render - Call OnPreRender after CameraData is created
+            foreach (var component in components)
+            {
+                if (component != null && component.EnabledInHierarchy)
+                    component.OnPreRender(this);
+            }
 
             renderer.Render(this, srpData, context);
         }
@@ -198,7 +220,9 @@ public class Camera : MonoBehaviour
         Veldrid.Framebuffer camTarget = Graphics.ScreenTarget;
 
         if (Target.Res != null)
+        {
             camTarget = Target.Res.Framebuffer;
+        }
 
         float renderScale = Math.Clamp(RenderScale, 0.1f, 2.0f);
         PixelWidth = (uint)Math.Max(1, (int)(camTarget.Width * renderScale));

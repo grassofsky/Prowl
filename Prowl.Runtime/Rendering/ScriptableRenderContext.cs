@@ -13,7 +13,6 @@ namespace Prowl.Runtime.Rendering;
 public class ScriptableRenderContext : IDisposable
 {
     private readonly List<RenderPass> _passes;
-    private readonly List<CommandBuffer> _pendingCommandBuffers;
     private Camera _camera;
     private SRPRenderingData _renderingData;
     private CullingResults _cullingResults;
@@ -22,7 +21,6 @@ public class ScriptableRenderContext : IDisposable
     public ScriptableRenderContext()
     {
         _passes = new List<RenderPass>();
-        _pendingCommandBuffers = new List<CommandBuffer>();
         _cullingResults = new CullingResults();
     }
 
@@ -31,7 +29,6 @@ public class ScriptableRenderContext : IDisposable
         _camera = camera;
         _renderingData = data;
         _passes.Clear();
-        _pendingCommandBuffers.Clear();
     }
 
     public void EnqueuePass(RenderPass pass)
@@ -57,28 +54,28 @@ public class ScriptableRenderContext : IDisposable
     {
         if (cmd == null)
             throw new ArgumentNullException(nameof(cmd));
-        _pendingCommandBuffers.Add(cmd);
+        
+        Graphics.SubmitCommandBuffer(cmd);
+        CommandBufferPool.Release(cmd);
     }
 
     public void Submit()
     {
-        foreach (var cmd in _pendingCommandBuffers)
-        {
-            Graphics.SubmitCommandBuffer(cmd);
-            CommandBufferPool.Release(cmd);
-        }
-        _pendingCommandBuffers.Clear();
+        // Command buffers are submitted immediately in ExecuteCommandBuffer()
     }
 
-    public void DrawRenderers(DrawingSettings drawingSettings, FilteringSettings filteringSettings)
+    public void DrawRenderers(DrawingSettings drawingSettings, FilteringSettings filteringSettings, CommandBuffer cmd)
     {
+        if (cmd == null)
+            throw new ArgumentNullException(nameof(cmd), "CommandBuffer is required for DrawRenderers.");
+        
         var cullingResults = GetCullingResults();
-        cullingResults.DrawRenderers(this, drawingSettings, filteringSettings);
+        cullingResults.DrawRenderers(this, drawingSettings, filteringSettings, cmd);
     }
 
-    public void DrawRenderers(DrawingSettings drawingSettings, FilteringSettings filteringSettings, RenderStateBlock stateBlock)
+    public void DrawRenderers(DrawingSettings drawingSettings, FilteringSettings filteringSettings, RenderStateBlock stateBlock, CommandBuffer cmd)
     {
-        DrawRenderers(drawingSettings, filteringSettings);
+        DrawRenderers(drawingSettings, filteringSettings, cmd);
     }
 
     public CameraData GetCameraData()
@@ -138,11 +135,6 @@ public class ScriptableRenderContext : IDisposable
 
     public void Dispose()
     {
-        foreach (var cmd in _pendingCommandBuffers)
-        {
-            cmd.Dispose();
-        }
-        _pendingCommandBuffers.Clear();
         _passes.Clear();
         _cullingResults?.Clear();
     }

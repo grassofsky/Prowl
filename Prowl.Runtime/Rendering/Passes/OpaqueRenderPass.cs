@@ -13,9 +13,23 @@ public class OpaqueRenderPass : RenderPass
         InjectionPoint = RenderPassEvent.AfterRenderingPrepasses;
     }
 
-    public void Setup(RenderTexture colorTarget, RenderTexture depthTarget)
+    public void Setup(RenderTexture colorTarget, RenderTexture depthTarget, CameraClearFlags clearFlags, Color clearColor)
     {
         ConfigureTarget(colorTarget, depthTarget);
+        
+        bool clearColorBuffer = clearFlags == CameraClearFlags.ColorOnly || clearFlags == CameraClearFlags.DepthColor;
+        bool clearDepthBuffer = clearFlags == CameraClearFlags.DepthOnly || clearFlags == CameraClearFlags.DepthColor;
+        bool drawSkybox = clearFlags == CameraClearFlags.Skybox;
+        
+        if (clearColorBuffer || clearDepthBuffer || drawSkybox)
+        {
+            ClearFlag flag = ClearFlag.None;
+            if (clearDepthBuffer || drawSkybox)
+                flag |= ClearFlag.Depth;
+            if (clearColorBuffer || drawSkybox)
+                flag |= ClearFlag.Color;
+            ConfigureClear(flag, clearColor);
+        }
     }
 
     public override void Configure(ScriptableRenderContext context, ref SRPRenderingData renderingData)
@@ -36,6 +50,8 @@ public class OpaqueRenderPass : RenderPass
         var cmd = CommandBufferPool.Get(Name);
 
         SetRenderTarget(cmd);
+        ClearRenderTarget(cmd);
+        cmd.SetViewports(0, 0, (int)cameraData.PixelWidth, (int)cameraData.PixelHeight, 0, 1);
 
         var drawingSettings = new DrawingSettings(
             new ShaderTagId("RenderOrder"),
@@ -46,9 +62,11 @@ public class OpaqueRenderPass : RenderPass
             RenderQueueRange.Opaque,
             cameraData.CullingMask);
 
-        context.DrawRenderers(drawingSettings, filteringSettings);
+        RenderUtils.SetGlobalCameraMatrices(cameraData.ViewMatrix, cameraData.ProjectionMatrix);
 
-        context.ExecuteCommandBuffer(cmd);
+        context.DrawRenderers(drawingSettings, filteringSettings, cmd);
+
+        Graphics.SubmitCommandBuffer(cmd);
         CommandBufferPool.Release(cmd);
     }
 

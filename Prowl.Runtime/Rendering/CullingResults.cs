@@ -1,6 +1,7 @@
 // This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -31,9 +32,10 @@ public class CullingResults
     public IEnumerable<RenderBatch> GetBatches() => _batches.Values;
     public IEnumerable<IRenderableLight> GetVisibleLights() => _visibleLights;
 
-    public void DrawRenderers(ScriptableRenderContext context, DrawingSettings drawingSettings, FilteringSettings filteringSettings)
+    public void DrawRenderers(ScriptableRenderContext context, DrawingSettings drawingSettings, FilteringSettings filteringSettings, CommandBuffer cmd)
     {
-        var cmd = CommandBufferPool.Get("DrawRenderers");
+        if (cmd == null)
+            throw new ArgumentNullException(nameof(cmd), "CommandBuffer is required. The caller must provide and manage the CommandBuffer lifecycle.");
 
         Vector3 cameraPosition = drawingSettings.SortingSettings.CameraPosition;
 
@@ -101,7 +103,7 @@ public class CullingResults
                     {
                         if (properties.TryGetInt("_ObjectID", out int instanceId))
                         {
-                            TrackModelMatrix(cmd, instanceId, model);
+                            MotionVectorTracker.TrackModelMatrix(cmd, instanceId, model);
                         }
                     }
 
@@ -117,48 +119,6 @@ public class CullingResults
                 }
             }
         }
-
-        context.ExecuteCommandBuffer(cmd);
-        CommandBufferPool.Release(cmd);
-    }
-
-    private static readonly Dictionary<int, Matrix4x4> s_prevModelMatrices = new();
-    private static readonly HashSet<int> s_activeObjectIds = new();
-    private static int s_framesSinceLastCleanup = 0;
-    private const int CLEANUP_INTERVAL_FRAMES = 120;
-
-    private static void TrackModelMatrix(CommandBuffer buffer, int objectId, Matrix4x4 currentModel)
-    {
-        s_activeObjectIds.Add(objectId);
-
-        if (s_prevModelMatrices.TryGetValue(objectId, out Matrix4x4 prevModel))
-            buffer.SetMatrix("prowl_PrevObjectToWorld", prevModel.ToFloat());
-        else
-            buffer.SetMatrix("prowl_PrevObjectToWorld", currentModel.ToFloat());
-
-        s_prevModelMatrices[objectId] = currentModel;
-    }
-
-    public static void CleanupUnusedModelMatrices()
-    {
-        s_framesSinceLastCleanup++;
-
-        if (s_framesSinceLastCleanup < CLEANUP_INTERVAL_FRAMES)
-            return;
-
-        s_framesSinceLastCleanup = 0;
-
-        var unusedKeys = new List<int>();
-        foreach (var key in s_prevModelMatrices.Keys)
-        {
-            if (!s_activeObjectIds.Contains(key))
-                unusedKeys.Add(key);
-        }
-
-        foreach (int key in unusedKeys)
-            s_prevModelMatrices.Remove(key);
-
-        s_activeObjectIds.Clear();
     }
 
     private bool PassesFilter(Material material, FilteringSettings filtering)

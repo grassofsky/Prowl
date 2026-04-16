@@ -182,7 +182,7 @@ public class BindableResourceSet
                 uint srcStride = Math.Min(destStride, (uint)value.width * value.height);
                 uint destLength = member.size / member.arrayStride;
 
-                for (int j = 0; j < Math.Min(destLength, value.arraySize); i++)
+                for (int j = 0; j < Math.Min(destLength, value.arraySize); j++)
                 {
                     Buffer.BlockCopy(value.data, (int)(j * srcStride), tempBuffer, (int)(member.bufferOffsetInBytes + (j * destStride)), (int)srcStride);
                 }
@@ -201,7 +201,7 @@ public class BindableResourceSet
                 uint srcStride = Math.Min(destStride, (uint)value.width * value.height);
                 uint destLength = member.size / member.arrayStride;
 
-                for (int j = 0; j < Math.Min(destLength, value.arraySize); i++)
+                for (int j = 0; j < Math.Min(destLength, value.arraySize); j++)
                 {
                     Buffer.BlockCopy(value.data, (int)(j * srcStride), tempBuffer, (int)(member.bufferOffsetInBytes + (j * destStride)), (int)srcStride);
                 }

@@ -38,10 +38,6 @@ public class DefaultRenderPipeline : RenderPipeline
     public static DefaultRenderPipeline Default { get; } = new();
 
     private static Matrix4x4 s_prevViewProjMatrix;
-    private static Dictionary<int, Matrix4x4> s_prevModelMatrices = new();
-    private static HashSet<int> s_activeObjectIds = new();
-    private const int CLEANUP_INTERVAL_FRAMES = 120; // Clean up every 120 frames
-    private static int s_framesSinceLastCleanup = 0;
 
     #endregion
 
@@ -94,43 +90,6 @@ public class DefaultRenderPipeline : RenderPipeline
         }
     }
 
-    private static void CleanupUnusedModelMatrices()
-    {
-        // Increment frame counter
-        s_framesSinceLastCleanup++;
-
-        // Only perform cleanup at specified interval
-        if (s_framesSinceLastCleanup < CLEANUP_INTERVAL_FRAMES)
-            return;
-
-        s_framesSinceLastCleanup = 0;
-
-        // Remove all matrices that weren't used in this frame
-        var unusedKeys = s_prevModelMatrices.Keys
-            .Where(key => !s_activeObjectIds.Contains(key))
-            .ToList();
-
-        foreach (int key in unusedKeys)
-            s_prevModelMatrices.Remove(key);
-
-        // Clear the active IDs set for next frame
-        s_activeObjectIds.Clear();
-    }
-
-    private static void TrackModelMatrix(CommandBuffer buffer, int objectId, Matrix4x4 currentModel)
-    {
-        // Mark this object ID as active this frame
-        s_activeObjectIds.Add(objectId);
-
-        // Store current model matrix for next frame
-        if (s_prevModelMatrices.TryGetValue(objectId, out Matrix4x4 prevModel))
-            buffer.SetMatrix("prowl_PrevObjectToWorld", prevModel.ToFloat());
-        else
-            buffer.SetMatrix("prowl_PrevObjectToWorld", currentModel.ToFloat()); // First frame, use current matrix
-
-        s_prevModelMatrices[objectId] = currentModel;
-    }
-
     #endregion
 
     #region Main Rendering
@@ -155,7 +114,7 @@ public class DefaultRenderPipeline : RenderPipeline
             RenderScene(buffer, camera, data, forwardBuffer, opaqueEffects, all, ref isHDR, toRelease);
 
             // Clean up unused matrices after rendering
-            CleanupUnusedModelMatrices();
+            MotionVectorTracker.CleanupUnusedModelMatrices();
 
             // Final post-processing
             if (finalEffects.Count > 0)
@@ -476,13 +435,21 @@ public class DefaultRenderPipeline : RenderPipeline
         CreateLightBuffer(buffer, css.cameraPosition, css.cullingMask, lights);
 
         buffer.SetRenderTarget(forwardBuffer);
-        if(ShadowMap != null)
-            buffer.SetTexture("_ShadowAtlas", ShadowMap.ColorBuffers[0]);
-        buffer.SetBuffer("_Lights", LightBuffer);
-        buffer.SetInt("_LightCount", LightCount);
-        buffer.SetVector("_CameraWorldPos", css.cameraPosition);
-        buffer.SetVector("_SunDir", sunDirection);
-        buffer.SetVector("prowl_ShadowAtlasSize", new Vector2(ShadowAtlas.GetSize(), ShadowAtlas.GetSize()));
+        //if(ShadowMap != null)
+        //    buffer.SetTexture("_ShadowAtlas", ShadowMap.ColorBuffers[0]);
+        //buffer.SetBuffer("_Lights", LightBuffer);
+        //buffer.SetInt("_LightCount", LightCount);
+        //buffer.SetVector("_CameraWorldPos", css.cameraPosition);
+        //buffer.SetVector("_SunDir", sunDirection);
+        //buffer.SetVector("prowl_ShadowAtlasSize", new Vector2(ShadowAtlas.GetSize(), ShadowAtlas.GetSize()));
+
+        if (ShadowMap != null)
+            PropertyState.SetGlobalRawTexture("_ShadowAtlas", ShadowMap.ColorBuffers[0].InternalTexture);
+        PropertyState.SetGlobalBuffer("_Lights", LightBuffer);
+        PropertyState.SetGlobalInt("_LightCount", LightCount);
+        PropertyState.SetGlobalVector("_CameraWorldPos", css.cameraPosition);
+        PropertyState.SetGlobalVector("_SunDir", sunDirection);
+        PropertyState.SetGlobalVector("prowl_ShadowAtlasSize", new Vector2(ShadowAtlas.GetSize(), ShadowAtlas.GetSize()));
     }
 
     private static void PrepareShadowAtlas()
@@ -807,7 +774,7 @@ public class DefaultRenderPipeline : RenderPipeline
                     // Store previous model matrix mainly for motion vectors, however, the user can use it for other things
                     if (updatePreviousMatrices && properties.TryGetInt("_ObjectID", out int instanceId))
                     {
-                        TrackModelMatrix(buffer, instanceId, model);
+                        MotionVectorTracker.TrackModelMatrix(buffer, instanceId, model);
                     }
 
                     if (CAMERA_RELATIVE)

@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
@@ -14,15 +15,15 @@ namespace Prowl.Runtime.Rendering;
 
 public partial class PropertyState
 {
-    internal static Dictionary<string, ValueProperty> _globalValues;
-    internal static Dictionary<string, (Veldrid.Texture?, Veldrid.Sampler?)> _globalTextures;
-    internal static Dictionary<string, (Veldrid.DeviceBuffer?, int, int)> _globalBuffers;
+    internal static ConcurrentDictionary<string, ValueProperty> _globalValues;
+    internal static ConcurrentDictionary<string, (Veldrid.Texture?, Veldrid.Sampler?)> _globalTextures;
+    internal static ConcurrentDictionary<string, (Veldrid.DeviceBuffer?, int, int)> _globalBuffers;
 
     static PropertyState()
     {
-        _globalValues = [];
-        _globalTextures = [];
-        _globalBuffers = [];
+        _globalValues = new ConcurrentDictionary<string, ValueProperty>();
+        _globalTextures = new ConcurrentDictionary<string, (Veldrid.Texture?, Veldrid.Sampler?)>();
+        _globalBuffers = new ConcurrentDictionary<string, (Veldrid.DeviceBuffer?, int, int)>();
     }
 
 
@@ -93,44 +94,74 @@ public partial class PropertyState
     {
         int tSize = sizeof(T);
 
-        ValueProperty property = _globalValues.GetValueOrDefault(name, default);
+        _globalValues.AddOrUpdate(
+            name,
+            (key) =>
+            {
+                var prop = new ValueProperty();
+                prop.type = type;
+                prop.width = (byte)width;
+                prop.height = (byte)height;
+                prop.arraySize = 0;
+                prop.data = new byte[tSize];
+                MemoryMarshal.Write(new Span<byte>(prop.data), newData);
+                return prop;
+            },
+            (key, existing) =>
+            {
+                existing.type = type;
+                existing.arraySize = 0;
+                existing.width = (byte)width;
+                existing.height = (byte)height;
 
-        property.type = type;
-        property.arraySize = 0;
-        property.width = (byte)width;
-        property.height = (byte)height;
+                if (existing.data == null || existing.data.Length < tSize || (tSize < 16 && existing.data.Length != tSize))
+                {
+                    existing.data = new byte[tSize];
+                }
 
-        if (property.data == null || property.data.Length < tSize || (tSize < 16 && property.data.Length != tSize))
-        {
-            property.data = new byte[tSize];
-
-            _globalValues[name] = property;
-        }
-
-        MemoryMarshal.Write(new Span<byte>(property.data), newData);
+                MemoryMarshal.Write(new Span<byte>(existing.data), newData);
+                return existing;
+            }
+        );
     }
 
     private static unsafe void WriteGlobalData<T>(string name, T[] newData, ValueType type, int width, int height) where T : unmanaged
     {
         int tSize = sizeof(T) * newData.Length;
 
-        ValueProperty property = _globalValues.GetValueOrDefault(name, default);
+        _globalValues.AddOrUpdate(
+            name,
+            (key) =>
+            {
+                var prop = new ValueProperty();
+                prop.type = type;
+                prop.width = (byte)width;
+                prop.height = (byte)height;
+                prop.arraySize = 0;
+                prop.data = new byte[tSize];
+                fixed (T* dataPtr = newData)
+                fixed (byte* valuePtr = prop.data)
+                    Buffer.MemoryCopy(dataPtr, valuePtr, prop.data.Length, tSize);
+                return prop;
+            },
+            (key, existing) =>
+            {
+                existing.type = type;
+                existing.arraySize = 0;
+                existing.width = (byte)width;
+                existing.height = (byte)height;
 
-        property.type = type;
-        property.arraySize = 0;
-        property.width = (byte)width;
-        property.height = (byte)height;
+                if (existing.data == null || existing.data.Length < tSize || (tSize < 16 && existing.data.Length != tSize))
+                {
+                    existing.data = new byte[tSize];
+                }
 
-        if (property.data == null || property.data.Length < tSize || (tSize < 16 && property.data.Length != tSize))
-        {
-            property.data = new byte[tSize];
-
-            _globalValues[name] = property;
-        }
-
-        fixed (T* dataPtr = newData)
-        fixed (byte* valuePtr = property.data)
-            Buffer.MemoryCopy(dataPtr, valuePtr, property.data.Length, tSize);
+                fixed (T* dataPtr = newData)
+                fixed (byte* valuePtr = existing.data)
+                    Buffer.MemoryCopy(dataPtr, valuePtr, existing.data.Length, tSize);
+                return existing;
+            }
+        );
     }
 
     #endregion

@@ -30,6 +30,7 @@ public class CameraData
     public LayerMask CullingMask;
 
     public CameraClearFlags ClearFlags;
+    public Color ClearColor;
     public DepthTextureMode DepthTextureMode;
     public bool HDR;
 
@@ -52,7 +53,6 @@ public class CameraData
             PixelWidth = camera.PixelWidth,
             PixelHeight = camera.PixelHeight,
 
-            ViewMatrix = camera.ViewMatrix,
             ProjectionMatrix = Graphics.GetGPUProjectionMatrix(camera.ProjectionMatrix),
             InverseViewMatrix = camera.ViewMatrix.Invert(),
             PreviousViewProjectionMatrix = camera.PreviousViewProjectionMatrix,
@@ -62,18 +62,25 @@ public class CameraData
             CullingMask = camera.CullingMask,
 
             ClearFlags = camera.ClearFlags,
+            ClearColor = camera.ClearColor,
             DepthTextureMode = camera.DepthTextureMode,
             HDR = camera.HDR,
 
             UseCameraRelativeRendering = cameraRelative
         };
 
-        data.ViewProjectionMatrix = data.ViewMatrix * data.ProjectionMatrix;
-
         if (cameraRelative)
         {
+            data.ViewMatrix = camera.OriginViewMatrix;
             data.OriginViewMatrix = camera.OriginViewMatrix;
         }
+        else
+        {
+            data.ViewMatrix = camera.ViewMatrix;
+            data.OriginViewMatrix = camera.OriginViewMatrix;
+        }
+
+        data.ViewProjectionMatrix = data.ViewMatrix * data.ProjectionMatrix;
 
         return data;
     }

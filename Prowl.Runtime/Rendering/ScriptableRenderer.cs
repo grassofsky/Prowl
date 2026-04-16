@@ -80,6 +80,9 @@ public abstract class ScriptableRenderer : IDisposable
         }
         _passes.Clear();
         _passesDirty = true;
+
+        // Clear global shader properties to prevent data leaking between frames
+        PropertyState.ClearGlobalData();
     }
 
     protected virtual void SortPasses()
@@ -177,9 +180,9 @@ public abstract class ScriptableRenderer : IDisposable
 
         Execute(context, ref data);
 
-        context.Submit();
-
         Cleanup(context, ref data);
+
+        MotionVectorTracker.CleanupUnusedModelMatrices();
     }
 
     public virtual void Dispose()

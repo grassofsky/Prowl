@@ -24,6 +24,12 @@ public class MainLightShadowPass : RenderPass
         _shadowSlices = new List<ShadowSliceData>();
     }
 
+    public void Setup(RenderTexture colorTarget, RenderTexture depthTarget)
+    {
+        ConfigureTarget(colorTarget, depthTarget);
+        //ConfigureClear(ClearFlag.All, Color.red);
+    }
+
     public override void Configure(ScriptableRenderContext context, ref SRPRenderingData renderingData)
     {
         ShadowAtlas.TryInitialize();
@@ -39,13 +45,10 @@ public class MainLightShadowPass : RenderPass
         var cameraData = renderingData.CameraData;
         var lights = renderingData.CullingResults.GetVisibleLights();
 
-        var cmd = CommandBufferPool.Get(Name);
-
         _shadowAtlas = ShadowAtlas.GetAtlas();
-        cmd.SetRenderTarget(_shadowAtlas);
-        cmd.ClearRenderTarget(true, false, Color.black);
+        ClearShadowAtlas(_shadowAtlas);
 
-        List<GPULight> gpuLights = CreateLightBuffer(context, cmd, lights, cameraData.WorldSpaceCameraPos, cameraData.CullingMask);
+        List<GPULight> gpuLights = CreateLightBuffer(context, lights, cameraData.WorldSpaceCameraPos, cameraData.CullingMask);
 
         unsafe
         {
@@ -61,10 +64,7 @@ public class MainLightShadowPass : RenderPass
             _lightCount = gpuLights.Count;
         }
 
-        SetGlobalLightingUniforms(cmd, lights, cameraData.WorldSpaceCameraPos);
-
-        context.ExecuteCommandBuffer(cmd);
-        CommandBufferPool.Release(cmd);
+        SetGlobalLightingUniforms(lights, cameraData.WorldSpaceCameraPos);
 
         renderingData.LightData.VisibleLights = new List<IRenderableLight>(lights);
         renderingData.LightData.MainLightIndex = GetMainLightIndex(lights);
@@ -72,7 +72,7 @@ public class MainLightShadowPass : RenderPass
         renderingData.ShadowData.ShadowSlices = _shadowSlices;
     }
 
-    private List<GPULight> CreateLightBuffer(ScriptableRenderContext context, CommandBuffer cmd, IEnumerable<IRenderableLight> lights, Vector3 cameraPosition, LayerMask cullingMask)
+    private List<GPULight> CreateLightBuffer(ScriptableRenderContext context, IEnumerable<IRenderableLight> lights, Vector3 cameraPosition, LayerMask cullingMask)
     {
         List<GPULight> gpuLights = new();
 
@@ -100,7 +100,7 @@ public class MainLightShadowPass : RenderPass
                     gpu.AtlasY = slot.Value.y;
                     gpu.AtlasWidth = res;
 
-                    RenderShadowMap(context, cmd, light, slot.Value, res, cameraPosition, cullingMask, out Matrix4x4 view, out Matrix4x4 proj);
+                    RenderShadowMap(context, light, slot.Value, res, cameraPosition, cullingMask, out Matrix4x4 view, out Matrix4x4 proj);
 
                     _shadowSlices.Add(new ShadowSliceData
                     {
@@ -170,8 +170,21 @@ public class MainLightShadowPass : RenderPass
         return oldPos;
     }
 
-    private void RenderShadowMap(ScriptableRenderContext context, CommandBuffer cmd, IRenderableLight light, Vector2Int slot, int res, Vector3 cameraPosition, LayerMask cullingMask, out Matrix4x4 viewOut, out Matrix4x4 projOut)
+    private void ClearShadowAtlas(RenderTexture atlasTexture)
     {
+        CommandBuffer atlasClear = CommandBufferPool.Get("Shadow Atlas Clear");
+        atlasClear.SetRenderTarget(atlasTexture);
+        atlasClear.ClearRenderTarget(true, false, Color.black);
+
+        Graphics.SubmitCommandBuffer(atlasClear);
+        CommandBufferPool.Release(atlasClear);
+    }
+
+    private void RenderShadowMap(ScriptableRenderContext context, IRenderableLight light, Vector2Int slot, int res, Vector3 cameraPosition, LayerMask cullingMask, out Matrix4x4 viewOut, out Matrix4x4 projOut)
+    {
+        var cmd = CommandBufferPool.Get(Name + " Shadow");
+
+        cmd.SetRenderTarget(_shadowAtlas);
         cmd.SetViewports(slot.x, slot.y, res, res, 0, 1000);
 
         light.GetShadowMatrix(out Matrix4x4 view, out Matrix4x4 proj);
@@ -198,9 +211,11 @@ public class MainLightShadowPass : RenderPass
 
         var filteringSettings = new FilteringSettings(RenderQueueRange.All, cullingMask);
 
-        shadowCullingResults.DrawRenderers(context, drawingSettings, filteringSettings);
+        context.DrawRenderers(drawingSettings, filteringSettings, cmd);
+        //cmd.SetFullViewports();
 
-        cmd.SetFullViewports();
+        Graphics.SubmitCommandBuffer(cmd);
+        CommandBufferPool.Release(cmd);
     }
 
     private void SetGlobalCameraMatrices(CommandBuffer cmd, Matrix4x4 view, Matrix4x4 proj)
@@ -211,17 +226,17 @@ public class MainLightShadowPass : RenderPass
         PropertyState.SetGlobalMatrix("prowl_MatVP", (view * proj).ToFloat());
     }
 
-    private void SetGlobalLightingUniforms(CommandBuffer cmd, IEnumerable<IRenderableLight> lights, Vector3 cameraPosition)
+    private void SetGlobalLightingUniforms(IEnumerable<IRenderableLight> lights, Vector3 cameraPosition)
     {
         Vector3 sunDirection = GetSunDirection(lights);
 
         if (_shadowAtlas != null)
-            cmd.SetTexture("_ShadowAtlas", _shadowAtlas.ColorBuffers[0]);
-        cmd.SetBuffer("_Lights", _lightBuffer);
-        cmd.SetInt("_LightCount", _lightCount);
-        cmd.SetVector("_CameraWorldPos", cameraPosition);
-        cmd.SetVector("_SunDir", sunDirection);
-        cmd.SetVector("prowl_ShadowAtlasSize", new Vector2(ShadowAtlas.GetSize(), ShadowAtlas.GetSize()));
+            PropertyState.SetGlobalRawTexture("_ShadowAtlas", _shadowAtlas.ColorBuffers[0].InternalTexture, _shadowAtlas.ColorBuffers[0].Sampler.InternalSampler);
+        PropertyState.SetGlobalBuffer("_Lights", _lightBuffer);
+        PropertyState.SetGlobalInt("_LightCount", _lightCount);
+        PropertyState.SetGlobalVector("_CameraWorldPos", cameraPosition);
+        PropertyState.SetGlobalVector("_SunDir", sunDirection);
+        PropertyState.SetGlobalVector("prowl_ShadowAtlasSize", new Vector2(ShadowAtlas.GetSize(), ShadowAtlas.GetSize()));
     }
 
     private int CalculateResolution(double distance)

@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 
 using Prowl.Echo;
 using Prowl.Runtime.Rendering.Pipelines;
+using Veldrid;
 
 namespace Prowl.Runtime.Rendering;
 
@@ -197,7 +198,19 @@ internal class SRPRenderPipeline : RenderPipeline
 
     public override void Render(Camera camera, in RenderingData data)
     {
+        Framebuffer cameraTarget = camera.UpdateRenderData();
+
+        // 1. Pre Cull - Call OnPreCull for all MonoBehaviour components on the camera
+        // This allows effects like MotionBlurEffect to set DepthTextureMode before CameraData is created
+        var components = camera.GetComponents<MonoBehaviour>();
+        foreach (var component in components)
+        {
+            if (component != null && component.EnabledInHierarchy)
+                component.OnPreCull(camera);
+        }
+
         var srpData = SRPRenderingData.Create(camera, data.IsSceneViewCamera);
+        srpData.CameraTarget = cameraTarget;
         srpData.DisplayGrid = data.DisplayGrid;
         srpData.DisplayGizmo = data.DisplayGizmo;
         srpData.GridMatrix = data.GridMatrix;
@@ -205,14 +218,21 @@ internal class SRPRenderPipeline : RenderPipeline
         srpData.GridSizes = data.GridSizes;
 
         var cullingResults = CullingResults.PerformCulling(
-            srpData.CameraData,
-            RenderPipeline.GetRenderables(),
-            RenderPipeline.GetLights());
+                srpData.CameraData,
+                RenderPipeline.GetRenderables(),
+                RenderPipeline.GetLights());
 
         srpData.CullingResults = cullingResults;
 
-        // Get per-camera context for thread safety
+        // 2. Pre Render - Call OnPreRender after CameraData is created
+        foreach (var component in components)
+        {
+            if (component != null && component.EnabledInHierarchy)
+                component.OnPreRender(camera);
+        }
+
         var context = _asset.GetContextForCamera(camera);
+        context.SetCullingResults(cullingResults);
         _renderer.Render(camera, srpData, context);
     }
 }

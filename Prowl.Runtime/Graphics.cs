@@ -1,4 +1,4 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using System;
@@ -140,7 +140,11 @@ public static partial class Graphics
 
     public static void SubmitCommandBuffer(CommandBuffer commandBuffer, GraphicsFence? fence = null)
     {
-        commandBuffer.Clear();
+        if (commandBuffer._isRecording)
+        {
+            commandBuffer._commandList.End();
+            commandBuffer._isRecording = false;
+        }
         Device.SubmitCommands(commandBuffer._commandList, fence?.Fence);
     }
 

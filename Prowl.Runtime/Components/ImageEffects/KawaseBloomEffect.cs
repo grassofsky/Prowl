@@ -1,8 +1,9 @@
-﻿// This file is part of the Prowl Game Engine
+// This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
 using Prowl.Icons;
 using Prowl.Runtime.Rendering;
+using Veldrid;
 
 namespace Prowl.Runtime;
 
@@ -62,15 +63,18 @@ public class KawaseBloomEffect : MonoBehaviour
         uint width = (uint)MathD.Max(1, src.Width * resScale);
         uint height = (uint)MathD.Max(1, src.Height * resScale);
 
+        PixelFormat srcFormat = (src.ColorBuffers != null && src.ColorBuffers.Length > 0) ? 
+                               src.ColorBuffers[0].Format : PixelFormat.R8_G8_B8_A8_UNorm;
 
-        RenderTexture tempA = RenderTexture.GetTemporaryRT(width, height, [src.ColorBuffers[0].Format]);
-        RenderTexture tempB = RenderTexture.GetTemporaryRT(width, height, [src.ColorBuffers[0].Format]);
+        RenderTexture tempA = RenderTexture.GetTemporaryRT(width, height, [srcFormat]);
+        RenderTexture tempB = RenderTexture.GetTemporaryRT(width, height, [srcFormat]);
         CommandBuffer tmpClear = CommandBufferPool.Get("Clear");
         tmpClear.SetRenderTarget(tempA);
         tmpClear.ClearRenderTarget(true, true, Color.clear);
         tmpClear.SetRenderTarget(tempB);
         tmpClear.ClearRenderTarget(true, true, Color.clear);
         Graphics.SubmitCommandBuffer(tmpClear);
+        CommandBufferPool.Release(tmpClear);
 
         // blit the source into tempA with a threshold (Pass 0)
         Graphics.Blit(src, tempA, s_bloomMaterial, 0);

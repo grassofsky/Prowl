@@ -40,6 +40,7 @@ public class DepthPrepass : RenderPass
 
         var cameraData = renderingData.CameraData;
 
+        // Create depth texture (R32_Float format for depth)
         _depthTexture = RenderTexture.GetTemporaryRT(
             cameraData.PixelWidth,
             cameraData.PixelHeight,
@@ -48,7 +49,22 @@ public class DepthPrepass : RenderPass
         _toRelease.Clear();
         _toRelease.Add(_depthTexture);
 
-        ConfigureTarget(_depthTexture);
+        // Use forward buffer as color target and depth texture as depth target
+        // If forward buffer is not available, we still need a color target for the prepass
+        if (_forwardBuffer != null)
+        {
+            ConfigureTarget(_forwardBuffer, _depthTexture);
+        }
+        else
+        {
+            // Create a temporary color target if forward buffer is not available
+            var tempColor = RenderTexture.GetTemporaryRT(
+                cameraData.PixelWidth,
+                cameraData.PixelHeight,
+                new[] { PixelFormat.R8_G8_B8_A8_UNorm });
+            _toRelease.Add(tempColor);
+            ConfigureTarget(tempColor, _depthTexture);
+        }
         ConfigureClear(ClearFlag.All, Color.white);
     }
 
@@ -57,6 +73,7 @@ public class DepthPrepass : RenderPass
         if (!ShouldExecute(ref renderingData) || _depthTexture == null)
             return;
 
+        var cameraData = renderingData.CameraData;
         var cmd = CommandBufferPool.Get(Name);
 
         SetRenderTarget(cmd);
@@ -64,12 +81,14 @@ public class DepthPrepass : RenderPass
 
         var drawingSettings = new DrawingSettings(
             new ShaderTagId("LightMode"),
-            new SortingSettings(renderingData.CameraData));
+            new SortingSettings(cameraData));
         drawingSettings.SetShaderPassValue("ShadowCaster");
 
         var filteringSettings = new FilteringSettings(RenderQueueRange.Opaque);
 
-        context.DrawRenderers(drawingSettings, filteringSettings);
+        SetGlobalCameraMatrices(cameraData.ViewMatrix, cameraData.ProjectionMatrix);
+
+        context.DrawRenderers(drawingSettings, filteringSettings, cmd);
 
         PropertyState.SetGlobalTexture("_CameraDepthTexture", _depthTexture);
 
@@ -81,6 +100,14 @@ public class DepthPrepass : RenderPass
 
         context.ExecuteCommandBuffer(cmd);
         CommandBufferPool.Release(cmd);
+    }
+
+    private void SetGlobalCameraMatrices(Matrix4x4 view, Matrix4x4 proj)
+    {
+        PropertyState.SetGlobalMatrix("prowl_MatV", view.ToFloat());
+        PropertyState.SetGlobalMatrix("prowl_MatIV", view.Invert().ToFloat());
+        PropertyState.SetGlobalMatrix("prowl_MatP", proj.ToFloat());
+        PropertyState.SetGlobalMatrix("prowl_MatVP", (view * proj).ToFloat());
     }
 
     public override void Cleanup(ScriptableRenderContext context, ref SRPRenderingData renderingData)

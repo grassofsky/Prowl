@@ -36,6 +36,7 @@ public class TransparentRenderPass : RenderPass
         var cmd = CommandBufferPool.Get(Name);
 
         SetRenderTarget(cmd);
+        cmd.SetViewports(0, 0, (int)cameraData.PixelWidth, (int)cameraData.PixelHeight, 0, 1);
 
         var drawingSettings = new DrawingSettings(
             new ShaderTagId("RenderOrder"),
@@ -46,9 +47,11 @@ public class TransparentRenderPass : RenderPass
             RenderQueueRange.Transparent,
             cameraData.CullingMask);
 
-        context.DrawRenderers(drawingSettings, filteringSettings);
+        RenderUtils.SetGlobalCameraMatrices(cameraData.ViewMatrix, cameraData.ProjectionMatrix);
 
-        context.ExecuteCommandBuffer(cmd);
+        context.DrawRenderers(drawingSettings, filteringSettings, cmd);
+
+        Graphics.SubmitCommandBuffer(cmd);
         CommandBufferPool.Release(cmd);
     }
 

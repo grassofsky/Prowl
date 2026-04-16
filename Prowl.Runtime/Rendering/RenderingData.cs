@@ -10,6 +10,7 @@ namespace Prowl.Runtime.Rendering;
 public class SRPRenderingData
 {
     public CameraData CameraData;
+    public Veldrid.Framebuffer CameraTarget;
 
     public CullingResults CullingResults;
 

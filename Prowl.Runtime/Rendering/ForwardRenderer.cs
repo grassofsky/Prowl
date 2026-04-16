@@ -1,7 +1,10 @@
 // This file is part of the Prowl Game Engine
 // Licensed under the MIT License. See the LICENSE file in the project root for details.
 
+using System;
 using System.Collections.Generic;
+using System.Numerics;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 using Prowl.Runtime.Rendering.Passes;
@@ -13,12 +16,20 @@ public class ForwardRenderer : ScriptableRenderer
 {
     private readonly DepthPrepass _depthPrepass;
     private readonly MainLightShadowPass _shadowPass;
+    private readonly MotionVectorPass _motionVectorPass;
     private readonly OpaqueRenderPass _opaquePass;
+    private readonly SkyboxPass _skyboxPass;
     private readonly TransparentRenderPass _transparentPass;
+    private readonly PostProcessPass _opaquePostProcessPass;
+    private readonly PostProcessPass _finalPostProcessPass;
 
     private readonly PipelineSettings _settings;
 
     private readonly ConditionalWeakTable<Camera, PerCameraData> _cameraDataCache = new();
+
+    // Store effects and GUI for cleanup callbacks
+    private List<MonoBehaviour> _allEffects;
+    private GuiLayer _guiLayer;
 
     public ForwardRenderer(PipelineSettings settings) : base()
     {
@@ -26,13 +37,20 @@ public class ForwardRenderer : ScriptableRenderer
 
         _depthPrepass = new DepthPrepass();
         _shadowPass = new MainLightShadowPass();
+        _motionVectorPass = new MotionVectorPass();
         _opaquePass = new OpaqueRenderPass();
+        _skyboxPass = new SkyboxPass();
         _transparentPass = new TransparentRenderPass();
+        _opaquePostProcessPass = new PostProcessPass();
+        _finalPostProcessPass = new PostProcessPass();
     }
 
     public override void Setup(ScriptableRenderContext context, ref SRPRenderingData renderingData)
     {
         var cameraData = renderingData.CameraData;
+
+        // Setup global uniforms first
+        SetupGlobalUniforms(cameraData);
 
         if (!_cameraDataCache.TryGetValue(cameraData.Camera, out PerCameraData perCameraData))
         {
@@ -42,19 +60,48 @@ public class ForwardRenderer : ScriptableRenderer
 
         EnsureRenderTargets(cameraData, perCameraData);
 
+        // Gather image effects
+        var (opaqueEffects, finalEffects, allEffects, guiLayer) = GatherImageEffects(cameraData.Camera, renderingData.IsSceneViewCamera);
+        _allEffects = allEffects;
+        _guiLayer = guiLayer;
+
         if (_settings.UseDepthPrepass && cameraData.DepthTextureMode.HasFlag(DepthTextureMode.Depth))
         {
             _depthPrepass.Setup(perCameraData.ColorTarget);
             EnqueuePass(_depthPrepass);
         }
-
         EnqueuePass(_shadowPass);
 
-        _opaquePass.Setup(perCameraData.ColorTarget, perCameraData.DepthTarget);
+        _opaquePass.Setup(perCameraData.ColorTarget, perCameraData.DepthTarget, cameraData.ClearFlags, cameraData.ClearColor);
         EnqueuePass(_opaquePass);
+
+        // Motion vectors after opaque objects
+        if (cameraData.DepthTextureMode.HasFlag(DepthTextureMode.MotionVectors))
+        {
+            _motionVectorPass.Setup(perCameraData.ColorTarget, cameraData.PreviousViewProjectionMatrix);
+            EnqueuePass(_motionVectorPass);
+        }
+
+        // Apply opaque image effects (after opaque objects, before transparent)
+        if (opaqueEffects.Count > 0)
+        {
+            _opaquePostProcessPass.Setup(perCameraData.ColorTarget, opaqueEffects, true);
+            EnqueuePass(_opaquePostProcessPass);
+        }
+
+        // Skybox after opaque objects
+        _skyboxPass.Setup(perCameraData.ColorTarget);
+        EnqueuePass(_skyboxPass);
 
         _transparentPass.Setup(perCameraData.ColorTarget, perCameraData.DepthTarget);
         EnqueuePass(_transparentPass);
+
+        // Apply final image effects (after all rendering)
+        if (finalEffects.Count > 0)
+        {
+            _finalPostProcessPass.Setup(perCameraData.ColorTarget, finalEffects, false);
+            EnqueuePass(_finalPostProcessPass);
+        }
 
         if (renderingData.IsSceneViewCamera && renderingData.DisplayGrid)
         {
@@ -79,10 +126,11 @@ public class ForwardRenderer : ScriptableRenderer
                 ? PixelFormat.R16_G16_B16_A16_Float
                 : PixelFormat.R8_G8_B8_A8_UNorm;
 
+            // Create a RenderTexture with both color and depth buffers
             var desc = new RenderTextureDescription(
                 (uint)cameraData.PixelWidth,
                 (uint)cameraData.PixelHeight,
-                null,
+                TextureUtility.GetBestSupportedDepthFormat(),
                 new[] { colorFormat },
                 true, false,
                 TextureSampleCount.Count1);
@@ -101,8 +149,105 @@ public class ForwardRenderer : ScriptableRenderer
         EnqueuePass(gridPass);
     }
 
+    private (List<MonoBehaviour> opaqueEffects, List<MonoBehaviour> finalEffects, List<MonoBehaviour> allEffects, GuiLayer guiLayer) GatherImageEffects(Camera camera, bool isSceneView)
+    {
+        var opaqueEffects = new List<MonoBehaviour>();
+        var finalEffects = new List<MonoBehaviour>();
+        var allEffects = new List<MonoBehaviour>();
+        GuiLayer guiLayer = null;
+
+        if (camera == null)
+            return (opaqueEffects, finalEffects, allEffects, guiLayer);
+
+        IEnumerable<MonoBehaviour> components = camera.GetComponents<MonoBehaviour>();
+
+        // If this is Scene view camera, also include effects from the Main camera
+        if (isSceneView && Camera.Main != null && Camera.Main != camera)
+        {
+            var mainComponents = Camera.Main.GetComponents<MonoBehaviour>();
+            components = System.Linq.Enumerable.Concat(components, mainComponents);
+        }
+
+        foreach (MonoBehaviour component in components)
+        {
+            if (component == null || !component.EnabledInHierarchy)
+                continue;
+
+            Type type = component.GetType();
+
+            // Check for GuiLayer
+            if (component is GuiLayer gui)
+            {
+                guiLayer = gui;
+                continue;
+            }
+
+            // If this is Scene view camera, the effect needs the ImageEffectAllowedInSceneView attribute
+            if (isSceneView)
+            {
+                if (type.GetCustomAttributes(typeof(ImageEffectAllowedInSceneViewAttribute), false).Length == 0)
+                    continue;
+            }
+
+            // Check if they have OnRenderImage method
+            MethodInfo method = type.GetMethod("OnRenderImage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method == null || method.DeclaringType == typeof(MonoBehaviour))
+                continue;
+
+            allEffects.Add(component);
+
+            // Check if this is an opaque effect
+            if (type.GetCustomAttributes(typeof(ImageEffectOpaqueAttribute), false).Length > 0)
+                opaqueEffects.Add(component);
+            else
+                finalEffects.Add(component);
+        }
+
+        return (opaqueEffects, finalEffects, allEffects, guiLayer);
+    }
+
     public override void Cleanup(ScriptableRenderContext context, ref SRPRenderingData renderingData)
     {
+        var camera = renderingData.CameraData.Camera;
+        
+        if (camera != null && _cameraDataCache.TryGetValue(camera, out PerCameraData perCameraData))
+        {
+            if (perCameraData.ColorTarget != null)
+            {
+                Framebuffer finalTarget = renderingData.CameraTarget ?? Graphics.ScreenTarget;
+
+                if (finalTarget != perCameraData.ColorTarget.Framebuffer)
+                {
+                    var cmd = CommandBufferPool.Get("Final Blit");
+                    cmd.SetRenderTarget(finalTarget);
+                    cmd.SetViewports(0, 0, perCameraData.Width, perCameraData.Height, 0, 1);
+                    cmd.Blit(perCameraData.ColorTarget, finalTarget);
+                    context.ExecuteCommandBuffer(cmd);
+                }
+            }
+        }
+
+        // Execute GUI rendering
+        if (_guiLayer != null)
+        {
+            Framebuffer target = renderingData.CameraTarget ?? Graphics.ScreenTarget;
+            _guiLayer.ExecuteGUI(target);
+        }
+
+        // Call OnPostRender for all effects
+        if (_allEffects != null)
+        {
+            foreach (MonoBehaviour effect in _allEffects)
+            {
+                if (effect != null)
+                    effect.OnPostRender(camera);
+            }
+        }
+
+        // Clear stored references
+        _allEffects = null;
+        _guiLayer = null;
+
         base.Cleanup(context, ref renderingData);
     }
 
@@ -133,6 +278,49 @@ public class ForwardRenderer : ScriptableRenderer
     internal static void CleanupStaticResources()
     {
         GridPass.CleanupStaticResources();
+        SkyboxPass.CleanupStaticResources();
+    }
+
+    private static void SetupGlobalUniforms(CameraData cameraData)
+    {
+        // Camera
+        PropertyState.SetGlobalVector("_WorldSpaceCameraPos", cameraData.WorldSpaceCameraPos);
+        bool flippedy = !Graphics.IsOpenGL && !Graphics.IsVulkan;
+        PropertyState.SetGlobalVector("_ProjectionParams", new Vector4(flippedy ? -1.0f : 1.0f, cameraData.NearClipPlane, cameraData.FarClipPlane, 1.0f / cameraData.FarClipPlane));
+        PropertyState.SetGlobalVector("_ScreenParams", new Vector4(cameraData.PixelWidth, cameraData.PixelHeight, 1.0f + 1.0f / cameraData.PixelWidth, 1.0f + 1.0f / cameraData.PixelHeight));
+
+        // Time
+        PropertyState.SetGlobalVector("_Time", new Vector4(Time.time / 20, Time.time, Time.time * 2, Time.time * 3));
+        PropertyState.SetGlobalVector("_SinTime", new Vector4((float)Math.Sin(Time.time / 8), (float)Math.Sin(Time.time / 4), (float)Math.Sin(Time.time / 2), (float)Math.Sin(Time.time)));
+        PropertyState.SetGlobalVector("_CosTime", new Vector4((float)Math.Cos(Time.time / 8), (float)Math.Cos(Time.time / 4), (float)Math.Cos(Time.time / 2), (float)Math.Cos(Time.time)));
+        PropertyState.SetGlobalVector("prowl_DeltaTime", new Vector4(Time.deltaTime, 1.0f / Time.deltaTime, Time.smoothDeltaTime, 1.0f / Time.smoothDeltaTime));
+
+        // Fog
+        Scene.FogParams fog = SceneManagement.SceneManager.Scene.Fog;
+        Vector4 fogParams = new Vector4(
+            fog.Density / (float)Math.Sqrt(0.693147181), // ln(2)
+            fog.Density / 0.693147181f, // ln(2)
+            -1.0f / (fog.End - fog.Start),
+            fog.End / (fog.End - fog.Start)
+        );
+        PropertyState.SetGlobalVector("prowl_FogColor", fog.Color);
+        PropertyState.SetGlobalVector("prowl_FogParams", fogParams);
+        PropertyState.SetGlobalVector("prowl_FogStates", new System.Numerics.Vector3(
+            fog.Mode == Scene.FogParams.FogMode.Linear ? 1 : 0,
+            fog.Mode == Scene.FogParams.FogMode.Exponential ? 1 : 0,
+            fog.Mode == Scene.FogParams.FogMode.ExponentialSquared ? 1 : 0
+        ));
+
+        // Ambient Lighting
+        Scene.AmbientLightParams ambient = SceneManagement.SceneManager.Scene.Ambient;
+        PropertyState.SetGlobalVector("prowl_AmbientMode", new Vector2(
+            ambient.Mode == Scene.AmbientLightParams.AmbientMode.Uniform ? 1 : 0,
+            ambient.Mode == Scene.AmbientLightParams.AmbientMode.Hemisphere ? 1 : 0
+        ));
+
+        PropertyState.SetGlobalVector("prowl_AmbientColor", ambient.Color);
+        PropertyState.SetGlobalVector("prowl_AmbientSkyColor", ambient.SkyColor);
+        PropertyState.SetGlobalVector("prowl_AmbientGroundColor", ambient.GroundColor);
     }
 
     private class PerCameraData
@@ -200,7 +388,7 @@ internal class GridPass : RenderPass
         cmd.DrawSingle(s_quadMesh);
 
         context.ExecuteCommandBuffer(cmd);
-        CommandBufferPool.Release(cmd);
+        // Note: ExecuteCommandBuffer already releases the CommandBuffer
     }
 
     private static void EnsureResources()

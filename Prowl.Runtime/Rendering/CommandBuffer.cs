@@ -27,7 +27,7 @@ public class CommandBuffer : IDisposable
     }
 
     internal CommandList _commandList;
-    private bool _isRecording = false;
+    internal bool _isRecording = false;
 
     private Framebuffer _activeFramebuffer;
     private KeywordState _keywordState;
@@ -66,7 +66,7 @@ public class CommandBuffer : IDisposable
     }
 
 
-    private void ResetState()
+    internal void ResetState()
     {
         _activeFramebuffer = null;
         _keywordState = KeywordState.Empty;

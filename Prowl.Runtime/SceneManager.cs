@@ -142,19 +142,15 @@ public static class SceneManager
 
         foreach (Camera? cam in Cameras)
         {
-            RenderPipeline pipeline = cam.Pipeline.Res ?? DefaultRenderPipeline.Default;
-
-            // If we have a target and the Camera doesnt, draw into the target
-            if (target != null && cam.Target == null)
+            if (target != null && cam.Target.IsExplicitNull)
             {
                 cam.Target = target;
-                pipeline.Render(cam, new());
+                cam.Render();
                 cam.Target = null;
             }
             else
             {
-                // Have no target or the camera has its own target
-                pipeline.Render(cam, new());
+                cam.Render();
             }
         }
 
