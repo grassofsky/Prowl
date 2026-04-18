@@ -38,6 +38,15 @@ public sealed class Material : EngineObject, ISerializationCallbackReceiver
     [SerializeField]
     private AssetRef<Shader> _shader;
 
+    [SerializeField]
+    private int _renderQueue = 2000;
+
+    public int RenderQueue
+    {
+        get => _renderQueue;
+        set => _renderQueue = value;
+    }
+
     public AssetRef<Shader> Shader
     {
         get => _shader;

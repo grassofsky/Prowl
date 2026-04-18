@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 using Prowl.Runtime.Rendering.Pipelines;
 using Veldrid;
@@ -56,7 +55,6 @@ public class ScriptableRenderContext : IDisposable
             throw new ArgumentNullException(nameof(cmd));
         
         Graphics.SubmitCommandBuffer(cmd);
-        CommandBufferPool.Release(cmd);
     }
 
     public void Submit()
@@ -75,6 +73,11 @@ public class ScriptableRenderContext : IDisposable
 
     public void DrawRenderers(DrawingSettings drawingSettings, FilteringSettings filteringSettings, RenderStateBlock stateBlock, CommandBuffer cmd)
     {
+        // TODO: Apply RenderStateBlock overrides once CommandBuffer supports direct state setters.
+        // Currently pipeline state is driven by ShaderPass/Material, so state overrides are not yet applied.
+        if (stateBlock.OverrideDepthState || stateBlock.OverrideBlendState || stateBlock.OverrideRasterizerState)
+            Debug.LogWarning("[SRP] RenderStateBlock overrides are not yet supported and will be ignored.");
+
         DrawRenderers(drawingSettings, filteringSettings, cmd);
     }
 
@@ -113,22 +116,12 @@ public class ScriptableRenderContext : IDisposable
         return _passes;
     }
 
-    internal void ExecutePasses()
-    {
-        var sortedPasses = _passes.OrderBy(p => p.InjectionPoint).ToList();
-
-        foreach (var pass in sortedPasses)
-        {
-            pass.Configure(this, ref _renderingData);
-            pass.Execute(this, ref _renderingData);
-        }
-    }
-
     internal void CleanupPasses()
     {
         foreach (var pass in _passes)
         {
             pass.Cleanup(this, ref _renderingData);
+            pass.ReleaseCombinedFramebuffer();
         }
         _passes.Clear();
     }

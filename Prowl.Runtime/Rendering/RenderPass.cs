@@ -9,6 +9,7 @@ public abstract class RenderPass
 {
     public string Name { get; protected set; } = "Unnamed Pass";
     public RenderPassEvent InjectionPoint { get; protected set; } = RenderPassEvent.AfterRendering;
+    internal int EnqueueOrder { get; set; }
 
     public RenderTargetIdentifier ColorTarget { get; protected set; }
     public RenderTargetIdentifier DepthTarget { get; protected set; }
@@ -24,6 +25,14 @@ public abstract class RenderPass
     public abstract void Execute(ScriptableRenderContext context, ref SRPRenderingData renderingData);
 
     public virtual void Cleanup(ScriptableRenderContext context, ref SRPRenderingData renderingData) { }
+
+    internal void ReleaseCombinedFramebuffer()
+    {
+        _combinedFramebuffer?.Dispose();
+        _combinedFramebuffer = null;
+        _cachedColorForCombined = null;
+        _cachedDepthForCombined = null;
+    }
 
     protected void ConfigureTarget(RenderTargetIdentifier colorTarget)
     {
@@ -56,11 +65,42 @@ public abstract class RenderPass
         _clearColor = clearColor;
     }
 
+    private Framebuffer _combinedFramebuffer;
+    private RenderTexture _cachedColorForCombined;
+    private RenderTexture _cachedDepthForCombined;
+
     protected void SetRenderTarget(CommandBuffer cmd)
     {
         if (_colorTarget != null && _depthTarget != null)
         {
-            cmd.SetRenderTarget(_colorTarget);
+            if (_depthTarget != _colorTarget)
+            {
+                // Rebuild combined framebuffer only when targets change
+                if (_combinedFramebuffer == null ||
+                    _cachedColorForCombined != _colorTarget ||
+                    _cachedDepthForCombined != _depthTarget)
+                {
+                    _combinedFramebuffer?.Dispose();
+
+                    var colorBuffers = _colorTarget.ColorBuffers;
+                    var textures = new Veldrid.Texture[colorBuffers.Length];
+                    for (int i = 0; i < colorBuffers.Length; i++)
+                        textures[i] = colorBuffers[i].InternalTexture;
+
+                    var desc = new FramebufferDescription(
+                        _depthTarget.DepthBuffer?.InternalTexture,
+                        textures);
+                    _combinedFramebuffer = Graphics.Factory.CreateFramebuffer(desc);
+                    _cachedColorForCombined = _colorTarget;
+                    _cachedDepthForCombined = _depthTarget;
+                }
+
+                cmd.SetRenderTarget(_combinedFramebuffer);
+            }
+            else
+            {
+                cmd.SetRenderTarget(_colorTarget);
+            }
         }
         else if (_colorTarget != null)
         {

@@ -16,6 +16,7 @@ public class CullingResults
     private readonly Dictionary<Material, RenderBatch> _batches;
     private readonly List<IRenderableLight> _visibleLights;
     private readonly List<(int index, float distance)> _sortBuffer;
+    private readonly List<int> _sortedResult;
 
     public int VisibleObjectCount => _visibleRenderables.Count;
     public int VisibleLightCount => _visibleLights.Count;
@@ -26,6 +27,7 @@ public class CullingResults
         _batches = new Dictionary<Material, RenderBatch>();
         _visibleLights = new List<IRenderableLight>();
         _sortBuffer = new List<(int, float)>();
+        _sortedResult = new List<int>();
     }
 
     public IEnumerable<IRenderable> GetVisibleRenderers() => _visibleRenderables;
@@ -126,6 +128,9 @@ public class CullingResults
         if (material == null || material.Shader.IsAvailable == false)
             return false;
 
+        if (!filtering.RenderQueueRange.Contains(material.RenderQueue))
+            return false;
+
         return true;
     }
 
@@ -135,7 +140,11 @@ public class CullingResults
         return filtering.LayerMask.HasLayer(layer);
     }
 
-    private List<int> GetSortedIndices(List<int> indices, SortingSettings sorting)
+    /// <summary>
+    /// Returns a read-only view of sorted indices. The returned list is reused internally —
+    /// its contents are only valid until the next call to GetSortedIndices.
+    /// </summary>
+    private IReadOnlyList<int> GetSortedIndices(List<int> indices, SortingSettings sorting)
     {
         if (sorting.Criteria == SortingCriteria.None)
             return indices;
@@ -164,13 +173,14 @@ public class CullingResults
             _sortBuffer.Sort((a, b) => a.distance.CompareTo(b.distance));
         }
 
-        var result = new List<int>(_sortBuffer.Count);
+        _sortedResult.Clear();
+        _sortedResult.EnsureCapacity(_sortBuffer.Count);
         for (int i = 0; i < _sortBuffer.Count; i++)
         {
-            result.Add(_sortBuffer[i].index);
+            _sortedResult.Add(_sortBuffer[i].index);
         }
 
-        return result;
+        return _sortedResult;
     }
 
     internal void AddRenderable(IRenderable renderable)

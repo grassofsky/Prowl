@@ -23,5 +23,11 @@ A clear and concise description of what you expected to happen.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
+**Affected module**
+Which area is affected? (example: Runtime, Editor, Desktop Player, Rendering/SRP)
+
+**Minimum reproduction command**
+Provide the smallest command sequence that reproduces the issue (example: `dotnet test --filter ...` or editor run path).
+
 **Additional context**
 Add any other context about the problem here.

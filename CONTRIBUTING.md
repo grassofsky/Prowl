@@ -12,6 +12,24 @@ Developing a game engine is a colossal task, and we can't do it alone. We need p
 
 Whether you're a seasoned developer or just getting started, your code contributions are invaluable. We have a list of [open issues](https://github.com/michaelsakharov/prowl/issues) that you can tackle, or feel free to propose your own improvements.
 
+## Agent Workflow
+
+If you are contributing with an AI coding agent, start with [agent/AGENTS.md](agent/AGENTS.md).
+
+Use these routing files when scoping work:
+
+- [agent/tasks/runtime.md](agent/tasks/runtime.md)
+- [agent/tasks/editor.md](agent/tasks/editor.md)
+- [agent/tasks/rendering.md](agent/tasks/rendering.md)
+
+Before opening a PR, run:
+
+1. `dotnet restore`
+2. `dotnet build --no-restore`
+3. `dotnet test`
+
+Do not modify `External/` unless the task explicitly requires dependency changes.
+
 ### Bug Reports 🐛
 
 Encountered a bug? We want to know! Submit detailed bug reports on our [issue tracker](https://github.com/michaelsakharov/prowl/issues) to help us squash those pesky bugs.

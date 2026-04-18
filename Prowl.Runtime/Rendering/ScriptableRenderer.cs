@@ -12,6 +12,10 @@ public abstract class ScriptableRenderer : IDisposable
     protected readonly List<RenderFeature> _features = new();
     protected readonly List<RenderPass> _sortedPassesCache = new();
     protected bool _passesDirty = true;
+    private int _enqueueCounter;
+    private readonly HashSet<RenderPass> _executedAndCleaned = new();
+    private readonly HashSet<RenderPass> _executedThisFrame = new();
+    private readonly HashSet<RenderPass> _enqueuedPassSet = new();
 
     protected ScriptableRenderContext _context;
 
@@ -32,7 +36,7 @@ public abstract class ScriptableRenderer : IDisposable
             SortPasses();
         }
 
-        List<RenderPass> executedPasses = new();
+        _executedThisFrame.Clear();
         try
         {
             foreach (var pass in _sortedPassesCache)
@@ -41,7 +45,7 @@ public abstract class ScriptableRenderer : IDisposable
                 {
                     pass.Configure(context, ref renderingData);
                     pass.Execute(context, ref renderingData);
-                    executedPasses.Add(pass);
+                    _executedThisFrame.Add(pass);
                 }
                 catch (Exception ex)
                 {
@@ -51,11 +55,12 @@ public abstract class ScriptableRenderer : IDisposable
         }
         finally
         {
-            foreach (var pass in executedPasses)
+            foreach (var pass in _executedThisFrame)
             {
                 try
                 {
                     pass.Cleanup(context, ref renderingData);
+                    _executedAndCleaned.Add(pass);
                 }
                 catch (Exception ex)
                 {
@@ -67,8 +72,12 @@ public abstract class ScriptableRenderer : IDisposable
 
     public virtual void Cleanup(ScriptableRenderContext context, ref SRPRenderingData renderingData)
     {
+        // Only clean up passes that were NOT already cleaned in Execute
         foreach (var pass in _passes)
         {
+            if (_executedAndCleaned.Contains(pass))
+                continue;
+
             try
             {
                 pass.Cleanup(context, ref renderingData);
@@ -80,6 +89,9 @@ public abstract class ScriptableRenderer : IDisposable
         }
         _passes.Clear();
         _passesDirty = true;
+        _executedAndCleaned.Clear();
+        _enqueuedPassSet.Clear();
+        _enqueueCounter = 0;
 
         // Clear global shader properties to prevent data leaking between frames
         PropertyState.ClearGlobalData();
@@ -95,7 +107,11 @@ public abstract class ScriptableRenderer : IDisposable
             _sortedPassesCache.Add(_passes[i]);
         }
 
-        _sortedPassesCache.Sort((a, b) => a.InjectionPoint.CompareTo(b.InjectionPoint));
+        _sortedPassesCache.Sort((a, b) =>
+        {
+            int cmp = a.InjectionPoint.CompareTo(b.InjectionPoint);
+            return cmp != 0 ? cmp : a.EnqueueOrder.CompareTo(b.EnqueueOrder);
+        });
         _passesDirty = false;
     }
 
@@ -103,7 +119,9 @@ public abstract class ScriptableRenderer : IDisposable
     {
         if (pass == null)
             throw new ArgumentNullException(nameof(pass));
+        pass.EnqueueOrder = _enqueueCounter++;
         _passes.Add(pass);
+        _enqueuedPassSet.Add(pass);
         _passesDirty = true;
     }
 
@@ -111,7 +129,9 @@ public abstract class ScriptableRenderer : IDisposable
     {
         _passes.Clear();
         _sortedPassesCache.Clear();
+        _enqueuedPassSet.Clear();
         _passesDirty = true;
+        _enqueueCounter = 0;
     }
 
     public void AddFeature(RenderFeature feature)
@@ -177,6 +197,15 @@ public abstract class ScriptableRenderer : IDisposable
         Setup(context, ref data);
 
         ExecuteFeatures(context, ref data);
+
+        // Merge feature-injected passes from context into renderer pass list
+        foreach (var pass in context.GetPasses())
+        {
+            if (!_enqueuedPassSet.Contains(pass))
+            {
+                EnqueuePass(pass);
+            }
+        }
 
         Execute(context, ref data);
 

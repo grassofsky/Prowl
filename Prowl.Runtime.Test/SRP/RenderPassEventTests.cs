@@ -16,9 +16,15 @@ public class RenderPassEventTests
         Assert.True(RenderPassEvent.AfterRenderingShadows < RenderPassEvent.BeforeRenderingPrepasses);
         Assert.True(RenderPassEvent.BeforeRenderingPrepasses < RenderPassEvent.AfterRenderingPrepasses);
         Assert.True(RenderPassEvent.AfterRenderingPrepasses < RenderPassEvent.BeforeRenderingOpaques);
-        Assert.True(RenderPassEvent.BeforeRenderingOpaques < RenderPassEvent.AfterRenderingOpaques);
-        Assert.True(RenderPassEvent.AfterRenderingOpaques < RenderPassEvent.BeforeRenderingTransparents);
-        Assert.True(RenderPassEvent.BeforeRenderingTransparents < RenderPassEvent.AfterRenderingTransparents);
+        Assert.True(RenderPassEvent.BeforeRenderingOpaques < RenderPassEvent.OnRenderingOpaques);
+        Assert.True(RenderPassEvent.OnRenderingOpaques < RenderPassEvent.AfterRenderingOpaques);
+        Assert.True(RenderPassEvent.AfterRenderingOpaques < RenderPassEvent.AfterRenderingOpaquesPostProcess);
+        Assert.True(RenderPassEvent.AfterRenderingOpaquesPostProcess < RenderPassEvent.BeforeRenderingSkybox);
+        Assert.True(RenderPassEvent.BeforeRenderingSkybox < RenderPassEvent.OnRenderingSkybox);
+        Assert.True(RenderPassEvent.OnRenderingSkybox < RenderPassEvent.AfterRenderingSkybox);
+        Assert.True(RenderPassEvent.AfterRenderingSkybox < RenderPassEvent.BeforeRenderingTransparents);
+        Assert.True(RenderPassEvent.BeforeRenderingTransparents < RenderPassEvent.OnRenderingTransparents);
+        Assert.True(RenderPassEvent.OnRenderingTransparents < RenderPassEvent.AfterRenderingTransparents);
         Assert.True(RenderPassEvent.AfterRenderingTransparents < RenderPassEvent.BeforeRenderingPostProcessing);
         Assert.True(RenderPassEvent.BeforeRenderingPostProcessing < RenderPassEvent.AfterRenderingPostProcessing);
         Assert.True(RenderPassEvent.AfterRenderingPostProcessing < RenderPassEvent.AfterRendering);
@@ -43,11 +49,17 @@ public class RenderPassEventTests
     [InlineData(RenderPassEvent.BeforeRenderingPrepasses, 150)]
     [InlineData(RenderPassEvent.AfterRenderingPrepasses, 200)]
     [InlineData(RenderPassEvent.BeforeRenderingOpaques, 250)]
+    [InlineData(RenderPassEvent.OnRenderingOpaques, 275)]
     [InlineData(RenderPassEvent.AfterRenderingOpaques, 300)]
-    [InlineData(RenderPassEvent.BeforeRenderingTransparents, 350)]
-    [InlineData(RenderPassEvent.AfterRenderingTransparents, 400)]
-    [InlineData(RenderPassEvent.BeforeRenderingPostProcessing, 450)]
-    [InlineData(RenderPassEvent.AfterRenderingPostProcessing, 500)]
+    [InlineData(RenderPassEvent.AfterRenderingOpaquesPostProcess, 310)]
+    [InlineData(RenderPassEvent.BeforeRenderingSkybox, 350)]
+    [InlineData(RenderPassEvent.OnRenderingSkybox, 375)]
+    [InlineData(RenderPassEvent.AfterRenderingSkybox, 400)]
+    [InlineData(RenderPassEvent.BeforeRenderingTransparents, 450)]
+    [InlineData(RenderPassEvent.OnRenderingTransparents, 475)]
+    [InlineData(RenderPassEvent.AfterRenderingTransparents, 500)]
+    [InlineData(RenderPassEvent.BeforeRenderingPostProcessing, 550)]
+    [InlineData(RenderPassEvent.AfterRenderingPostProcessing, 600)]
     [InlineData(RenderPassEvent.AfterRendering, 1000)]
     public void EventValues_AreCorrect(RenderPassEvent evt, int expectedValue)
     {

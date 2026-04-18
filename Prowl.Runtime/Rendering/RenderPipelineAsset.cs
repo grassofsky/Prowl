@@ -37,14 +37,14 @@ public abstract class RenderPipelineAsset : ScriptableObject
     private volatile ScriptableRenderer _sharedRenderer;
 
     [SerializeIgnore]
-    private object _rendererLock;
+    private object _rendererLock = new object();
 
     // Per-camera context storage for thread safety
     [SerializeIgnore]
-    private ConditionalWeakTable<Camera, ScriptableRenderContext> _cameraContexts;
+    private ConditionalWeakTable<Camera, ScriptableRenderContext> _cameraContexts = new();
 
     [SerializeIgnore]
-    private object _contextLock;
+    private object _contextLock = new object();
 
     public IReadOnlyList<RenderFeature> RenderFeatures => _renderFeatures;
     public PipelineSettings Settings => _settings;
@@ -116,16 +116,19 @@ public abstract class RenderPipelineAsset : ScriptableObject
     public void AddRenderFeature(RenderFeature feature)
     {
         _renderFeatures.Add(feature);
+        InvalidateSharedRenderer();
     }
 
     public void RemoveRenderFeature(RenderFeature feature)
     {
         _renderFeatures.Remove(feature);
+        InvalidateSharedRenderer();
     }
 
     public void RemoveRenderFeatureAt(int index)
     {
         _renderFeatures.RemoveAt(index);
+        InvalidateSharedRenderer();
     }
 
     public virtual bool Validate()
@@ -158,10 +161,13 @@ public abstract class RenderPipelineAsset : ScriptableObject
 
     public void InvalidateSharedRenderer()
     {
-        if (_sharedRenderer != null)
+        lock (_rendererLock)
         {
-            _sharedRenderer.Dispose();
-            _sharedRenderer = null;
+            if (_sharedRenderer != null)
+            {
+                _sharedRenderer.Dispose();
+                _sharedRenderer = null;
+            }
         }
 
         // Cleanup all per-camera contexts

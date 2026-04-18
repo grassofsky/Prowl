@@ -22,10 +22,11 @@
    * [Installation](#installation)
 4. [Roadmap](#-roadmap-)
 5. [Contributing](#-contributing-)
-6. [Acknowledgments](#-acknowledgments-)
+6. [Agent Development](#-agent-development-)
+7. [Acknowledgments](#-acknowledgments-)
    * [Prerequisites](#contributors-)
    * [Dependencies](#dependencies-)
-7. [License](#-license-)
+8. [License](#-license-)
 
 # <span align="center">📝 About The Project 📝
 
@@ -144,6 +145,12 @@ Getting Prowl up and running is super easy!
 2. Open `.sln` with your editor ([Visual Studio Version 17.8.0+](https://visualstudio.microsoft.com/vs/preview/), [VSCode](https://code.visualstudio.com/), [Rider]((https://www.jetbrains.com/rider/)), etc.)
 3. Run `UpdateSubmodules.bat` (on Windows) or `UpdateSubmodules.sh` (on Linux)
 4. That's it! 😄 🎉
+
+## Agent Quick Start
+
+If you are using an AI coding agent, start from [agent/AGENTS.md](agent/AGENTS.md).
+
+The entry contains writable boundaries, validation commands, and task routing for runtime/editor/rendering work.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 # <span align="center">🗺️ Roadmap 🗺️</span>
@@ -183,6 +190,12 @@ The complete list is in our [board](https://github.com/orgs/ProwlEngine/projects
 # <span align="center">🤝 Contributing 🤝</span>
 
 Check our [Contributing guide](//CONTRIBUTING.md) to see how to be part of this team.
+
+# <span align="center">🤖 Agent Development 🤖</span>
+
+Agent entry and workflow files live under [agent/](agent/).
+
+Start from [agent/AGENTS.md](agent/AGENTS.md), then follow task-specific routes under [agent/tasks/](agent/tasks/).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

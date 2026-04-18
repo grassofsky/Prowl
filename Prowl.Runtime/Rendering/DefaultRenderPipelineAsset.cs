@@ -61,10 +61,19 @@ public class DefaultRenderPipelineAsset : RenderPipelineAsset
     {
         base.OnValidate();
 
+        bool changed = _settings.UseHDR != _useHDR ||
+                       _settings.MaxLights != _maxLights ||
+                       _settings.ShadowAtlasSize != _shadowAtlasSize ||
+                       _settings.UseDepthPrepass != _useDepthPrepass ||
+                       _settings.UseMotionVectors != _useMotionVectors;
+
         _settings.UseHDR = _useHDR;
         _settings.MaxLights = _maxLights;
         _settings.ShadowAtlasSize = _shadowAtlasSize;
         _settings.UseDepthPrepass = _useDepthPrepass;
         _settings.UseMotionVectors = _useMotionVectors;
+
+        if (changed)
+            InvalidateSharedRenderer();
     }
 }

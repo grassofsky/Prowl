@@ -246,7 +246,37 @@ public class PipelineSettingsTests
 
 internal class TestRenderPass : RenderPass
 {
+    public int ConfigureCount { get; private set; }
+    public int ExecuteCount { get; private set; }
+    public int CleanupCount { get; private set; }
+
     public TestRenderPass(string name, RenderPassEvent injectionPoint)
+    {
+        Name = name;
+        InjectionPoint = injectionPoint;
+    }
+
+    public override void Configure(ScriptableRenderContext context, ref SRPRenderingData renderingData)
+    {
+        ConfigureCount++;
+    }
+
+    public override void Execute(ScriptableRenderContext context, ref SRPRenderingData renderingData)
+    {
+        ExecuteCount++;
+    }
+
+    public override void Cleanup(ScriptableRenderContext context, ref SRPRenderingData renderingData)
+    {
+        CleanupCount++;
+    }
+}
+
+internal class ThrowingExecutePass : RenderPass
+{
+    public int CleanupCount { get; private set; }
+
+    public ThrowingExecutePass(string name, RenderPassEvent injectionPoint)
     {
         Name = name;
         InjectionPoint = injectionPoint;
@@ -254,11 +284,40 @@ internal class TestRenderPass : RenderPass
 
     public override void Execute(ScriptableRenderContext context, ref SRPRenderingData renderingData)
     {
+        throw new InvalidOperationException("Test exception in Execute");
+    }
+
+    public override void Cleanup(ScriptableRenderContext context, ref SRPRenderingData renderingData)
+    {
+        CleanupCount++;
+    }
+}
+
+internal class ThrowingCleanupPass : RenderPass
+{
+    public int ExecuteCount { get; private set; }
+
+    public ThrowingCleanupPass(string name, RenderPassEvent injectionPoint)
+    {
+        Name = name;
+        InjectionPoint = injectionPoint;
+    }
+
+    public override void Execute(ScriptableRenderContext context, ref SRPRenderingData renderingData)
+    {
+        ExecuteCount++;
+    }
+
+    public override void Cleanup(ScriptableRenderContext context, ref SRPRenderingData renderingData)
+    {
+        throw new InvalidOperationException("Test exception in Cleanup");
     }
 }
 
 internal class TestRenderFeature : RenderFeature
 {
+    public int AddRenderPassesCount { get; private set; }
+
     public TestRenderFeature(string name)
     {
         FeatureName = name;
@@ -266,14 +325,31 @@ internal class TestRenderFeature : RenderFeature
 
     public override void AddRenderPasses(ScriptableRenderContext context, ref SRPRenderingData renderingData)
     {
+        AddRenderPassesCount++;
         context.EnqueuePass(new TestRenderPass("FeaturePass", RenderPassEvent.AfterRenderingOpaques));
+    }
+}
+
+internal class ThrowingFeature : RenderFeature
+{
+    public ThrowingFeature(string name)
+    {
+        FeatureName = name;
+    }
+
+    public override void AddRenderPasses(ScriptableRenderContext context, ref SRPRenderingData renderingData)
+    {
+        throw new InvalidOperationException("Test exception in AddRenderPasses");
     }
 }
 
 internal class TestScriptableRenderer : ScriptableRenderer
 {
+    public bool SetupCalled { get; private set; }
+
     public override void Setup(ScriptableRenderContext context, ref SRPRenderingData renderingData)
     {
+        SetupCalled = true;
         EnqueuePass(new TestRenderPass("SetupPass", RenderPassEvent.BeforeRendering));
     }
 }

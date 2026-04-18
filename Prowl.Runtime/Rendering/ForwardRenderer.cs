@@ -111,9 +111,14 @@ public class ForwardRenderer : ScriptableRenderer
 
     private void EnsureRenderTargets(CameraData cameraData, PerCameraData perCameraData)
     {
+        PixelFormat colorFormat = _settings.UseHDR && cameraData.HDR
+            ? PixelFormat.R16_G16_B16_A16_Float
+            : PixelFormat.R8_G8_B8_A8_UNorm;
+
         bool needsNewTarget = perCameraData.ColorTarget == null ||
                               perCameraData.Width != cameraData.PixelWidth ||
-                              perCameraData.Height != cameraData.PixelHeight;
+                              perCameraData.Height != cameraData.PixelHeight ||
+                              perCameraData.Format != colorFormat;
 
         if (needsNewTarget)
         {
@@ -121,10 +126,6 @@ public class ForwardRenderer : ScriptableRenderer
             {
                 RenderTexture.ReleaseTemporaryRT(perCameraData.ColorTarget);
             }
-
-            PixelFormat colorFormat = _settings.UseHDR && cameraData.HDR
-                ? PixelFormat.R16_G16_B16_A16_Float
-                : PixelFormat.R8_G8_B8_A8_UNorm;
 
             // Create a RenderTexture with both color and depth buffers
             var desc = new RenderTextureDescription(
@@ -139,6 +140,7 @@ public class ForwardRenderer : ScriptableRenderer
             perCameraData.DepthTarget = perCameraData.ColorTarget;
             perCameraData.Width = (int)cameraData.PixelWidth;
             perCameraData.Height = (int)cameraData.PixelHeight;
+            perCameraData.Format = colorFormat;
         }
     }
 
@@ -219,10 +221,17 @@ public class ForwardRenderer : ScriptableRenderer
                 if (finalTarget != perCameraData.ColorTarget.Framebuffer)
                 {
                     var cmd = CommandBufferPool.Get("Final Blit");
-                    cmd.SetRenderTarget(finalTarget);
-                    cmd.SetViewports(0, 0, perCameraData.Width, perCameraData.Height, 0, 1);
-                    cmd.Blit(perCameraData.ColorTarget, finalTarget);
-                    context.ExecuteCommandBuffer(cmd);
+                    try
+                    {
+                        cmd.SetRenderTarget(finalTarget);
+                        cmd.SetViewports(0, 0, perCameraData.Width, perCameraData.Height, 0, 1);
+                        cmd.Blit(perCameraData.ColorTarget, finalTarget);
+                        context.ExecuteCommandBuffer(cmd);
+                    }
+                    finally
+                    {
+                        CommandBufferPool.Release(cmd);
+                    }
                 }
             }
         }
@@ -254,9 +263,10 @@ public class ForwardRenderer : ScriptableRenderer
     public override void Dispose()
     {
         CleanupStaticResources();
+        base.Dispose();
     }
 
-    public void CleanupCamera(Camera camera)
+    public override void CleanupCamera(Camera camera)
     {
         if (_cameraDataCache.TryGetValue(camera, out PerCameraData perCameraData))
         {
@@ -293,15 +303,24 @@ public class ForwardRenderer : ScriptableRenderer
         PropertyState.SetGlobalVector("_Time", new Vector4(Time.time / 20, Time.time, Time.time * 2, Time.time * 3));
         PropertyState.SetGlobalVector("_SinTime", new Vector4((float)Math.Sin(Time.time / 8), (float)Math.Sin(Time.time / 4), (float)Math.Sin(Time.time / 2), (float)Math.Sin(Time.time)));
         PropertyState.SetGlobalVector("_CosTime", new Vector4((float)Math.Cos(Time.time / 8), (float)Math.Cos(Time.time / 4), (float)Math.Cos(Time.time / 2), (float)Math.Cos(Time.time)));
-        PropertyState.SetGlobalVector("prowl_DeltaTime", new Vector4(Time.deltaTime, 1.0f / Time.deltaTime, Time.smoothDeltaTime, 1.0f / Time.smoothDeltaTime));
+        float invDt = Time.deltaTime > 0 ? 1.0f / (float)Time.deltaTime : 0f;
+        float invSdt = Time.smoothDeltaTime > 0 ? 1.0f / (float)Time.smoothDeltaTime : 0f;
+        PropertyState.SetGlobalVector("prowl_DeltaTime", new Vector4((float)Time.deltaTime, invDt, (float)Time.smoothDeltaTime, invSdt));
 
-        // Fog
-        Scene.FogParams fog = SceneManagement.SceneManager.Scene.Fog;
+        // Fog & Ambient — guard against null scene
+        var scene = SceneManagement.SceneManager.Scene;
+        if (scene == null)
+            return;
+
+        Scene.FogParams fog = scene.Fog;
+        float fogRange = (float)(fog.End - fog.Start);
+        float invFogRange = Math.Abs(fogRange) > 1e-6f ? -1.0f / fogRange : 0f;
+        float fogEndFactor = Math.Abs(fogRange) > 1e-6f ? (float)fog.End / fogRange : 0f;
         Vector4 fogParams = new Vector4(
             fog.Density / (float)Math.Sqrt(0.693147181), // ln(2)
             fog.Density / 0.693147181f, // ln(2)
-            -1.0f / (fog.End - fog.Start),
-            fog.End / (fog.End - fog.Start)
+            invFogRange,
+            fogEndFactor
         );
         PropertyState.SetGlobalVector("prowl_FogColor", fog.Color);
         PropertyState.SetGlobalVector("prowl_FogParams", fogParams);
@@ -312,7 +331,7 @@ public class ForwardRenderer : ScriptableRenderer
         ));
 
         // Ambient Lighting
-        Scene.AmbientLightParams ambient = SceneManagement.SceneManager.Scene.Ambient;
+        Scene.AmbientLightParams ambient = scene.Ambient;
         PropertyState.SetGlobalVector("prowl_AmbientMode", new Vector2(
             ambient.Mode == Scene.AmbientLightParams.AmbientMode.Uniform ? 1 : 0,
             ambient.Mode == Scene.AmbientLightParams.AmbientMode.Hemisphere ? 1 : 0
@@ -329,6 +348,7 @@ public class ForwardRenderer : ScriptableRenderer
         public RenderTexture DepthTarget;
         public int Width;
         public int Height;
+        public PixelFormat Format;
     }
 }
 
@@ -388,7 +408,7 @@ internal class GridPass : RenderPass
         cmd.DrawSingle(s_quadMesh);
 
         context.ExecuteCommandBuffer(cmd);
-        // Note: ExecuteCommandBuffer already releases the CommandBuffer
+        CommandBufferPool.Release(cmd);
     }
 
     private static void EnsureResources()
