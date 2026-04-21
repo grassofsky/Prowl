@@ -52,6 +52,99 @@ public abstract class Texture : EngineObject, ISerializable
     /// <summary>The internal <see cref="Veldrid.Texture"/> representation.</summary>
     internal Veldrid.Texture InternalTexture { get; private set; }
 
+    private nint _cachedNativePtr;
+    private bool _nativePtrCached;
+
+    /// <summary>
+    /// Returns the native GPU handle for this texture, depending on the active graphics backend.
+    /// D3D11: ID3D11Texture2D*, Vulkan: VkImage (as nint), OpenGL: texture name (as nint).
+    /// Analogous to Unity's Texture.GetNativeTexturePtr().
+    /// </summary>
+    /// <returns>A native pointer/handle, or zero if the backend is not supported or the texture is invalid.</returns>
+    public nint GetNativeTexturePtr()
+    {
+        if (_nativePtrCached)
+            return _cachedNativePtr;
+
+        var veldridTexture = InternalTexture;
+        if (veldridTexture == null)
+            return 0;
+
+        var device = Graphics.Device;
+        nint ptr = device.BackendType switch
+        {
+#if !EXCLUDE_D3D11_BACKEND
+            GraphicsBackend.Direct3D11 => device.GetD3D11Info().GetTexturePointer(veldridTexture),
+#endif
+#if !EXCLUDE_VULKAN_BACKEND
+            GraphicsBackend.Vulkan => (nint)device.GetVulkanInfo().GetVkImage(veldridTexture),
+#endif
+#if !EXCLUDE_OPENGL_BACKEND
+            GraphicsBackend.OpenGL or GraphicsBackend.OpenGLES
+                => GetOpenGLTextureName(device, veldridTexture),
+#endif
+            _ => 0,
+        };
+
+        if (ptr != 0)
+        {
+            _cachedNativePtr = ptr;
+            _nativePtrCached = true;
+        }
+
+        return ptr;
+    }
+
+#if !EXCLUDE_OPENGL_BACKEND
+    private static nint GetOpenGLTextureName(GraphicsDevice device, Veldrid.Texture texture)
+    {
+        var glInfo = device.GetOpenGLInfo();
+        nint result = 0;
+
+        // Fast path — texture may already be initialized on the GL thread
+        glInfo.ExecuteOnGLThread(() =>
+        {
+            result = (nint)glInfo.GetTextureName(texture);
+        });
+
+        if (result != 0)
+            return result;
+
+        // OpenGL textures use deferred creation. Force initialization by submitting
+        // a command that references the texture. This is AOT-safe (no reflection).
+        // Use R8_G8_B8_A8_UNorm for staging — compressed formats (BC/ETC/ASTC) don't
+        // support 1×1 staging textures.
+        try
+        {
+            using var staging = device.ResourceFactory.CreateTexture(new TextureDescription(
+                1, 1, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.Staging, TextureType.Texture2D));
+            using var cl = device.ResourceFactory.CreateCommandList();
+            cl.Begin();
+            cl.CopyTexture(texture, 0, 0, 0, 0, 0, staging, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+            cl.End();
+            device.SubmitCommands(cl);
+            device.WaitForIdle();
+        }
+        catch
+        {
+            // Fallback for compressed/exotic formats: submit a no-op command list
+            // that still forces the GL context to process deferred resources.
+            using var cl = device.ResourceFactory.CreateCommandList();
+            cl.Begin();
+            cl.End();
+            device.SubmitCommands(cl);
+            device.WaitForIdle();
+        }
+
+        glInfo.ExecuteOnGLThread(() =>
+        {
+            result = (nint)glInfo.GetTextureName(texture);
+        });
+
+        return result;
+    }
+#endif
+
     private Veldrid.Texture stagingTexture = null;
 
 
@@ -79,6 +172,8 @@ public abstract class Texture : EngineObject, ISerializable
 
         InternalTexture = null;
         stagingTexture = null;
+        _cachedNativePtr = 0;
+        _nativePtrCached = false;
 
         Sampler?.Dispose();
     }

@@ -194,6 +194,9 @@ public abstract class ScriptableRenderer : IDisposable
 
         context.Setup(camera, data);
 
+        // Expose the renderer to RenderFeatures via context
+        context.Renderer = this;
+
         Setup(context, ref data);
 
         ExecuteFeatures(context, ref data);

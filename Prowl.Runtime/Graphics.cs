@@ -9,6 +9,7 @@ using Veldrid;
 using Veldrid.StartupUtilities;
 
 using Prowl.Runtime.Rendering;
+using Prowl.Runtime.Rendering.NativeRendering;
 using Prowl.Runtime.Rendering.Pipelines;
 using System.Linq;
 
@@ -53,6 +54,11 @@ public static partial class Graphics
     public static GraphicsDevice Device { get; internal set; }
     public static ResourceFactory Factory => Device.ResourceFactory;
 
+    /// <summary>
+    /// Provides access to native graphics device handles for interop with native rendering plugins.
+    /// </summary>
+    public static IProwlGraphicsInterop GraphicsInterop { get; internal set; }
+
     public static Framebuffer ScreenTarget => Device.SwapchainFramebuffer;
 
     public static Vector2Int TargetResolution => new Vector2(ScreenTarget.Width, ScreenTarget.Height);
@@ -84,6 +90,10 @@ public static partial class Graphics
         };
 
         Device = VeldridStartup.CreateGraphicsDevice(Screen.InternalWindow, deviceOptions, preferredBackend);
+
+        var interop = new ProwlGraphicsInterop();
+        GraphicsInterop = interop;
+        interop.RaiseDeviceCreated();
 
         if (RuntimeUtils.IsWindows())
         {
@@ -176,6 +186,8 @@ public static partial class Graphics
 
     internal static void Dispose()
     {
+        (GraphicsInterop as ProwlGraphicsInterop)?.RaiseDeviceDestroying();
+
         ShaderPipelineCache.Dispose();
         GUI.Graphics.UIDrawListRenderer.Dispose();
 

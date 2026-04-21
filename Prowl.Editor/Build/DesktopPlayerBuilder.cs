@@ -58,6 +58,9 @@ public class Desktop_Player : ProjectBuilder
         // Debug.Log($"Preparing project settings.");
         PackProjectSettings(buildDataPath);
 
+        // Debug.Log($"Packing native plugins.");
+        PackNativePlugins(buildDataPath);
+
         Debug.Log($"Successfully built project to {output}");
 
         // Open the Build folder
@@ -295,6 +298,84 @@ public class Desktop_Player : ProjectBuilder
         while ((searchType = searchType.BaseType) != null);
 
         return null;
+    }
+
+
+    private void PackNativePlugins(string dataPath)
+    {
+        Project active = Project.Active!;
+        string pluginsSource = Path.Combine(active.AssetDirectory.FullName, "Plugins");
+
+        if (!Directory.Exists(pluginsSource))
+            return;
+
+        string rid = NativePluginResolver.GetRid(platform, architecture);
+        string[] nativeExtensions = [".dll", ".so", ".dylib"];
+
+        int count = 0;
+
+        // Recursively scan Assets/Plugins/ for native libraries
+        foreach (string file in Directory.GetFiles(pluginsSource, "*.*", SearchOption.AllDirectories))
+        {
+            string ext = Path.GetExtension(file);
+            if (!nativeExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            // Skip .meta companion files
+            if (file.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Check if the .meta file has platform/architecture restrictions
+            FileInfo fileInfo = new(file);
+            MetaFile? meta = MetaFile.Load(fileInfo);
+            if (meta?.importer is NativePluginImporter pluginImporter)
+            {
+                if (!pluginImporter.MatchesBuildTarget(platform, architecture))
+                {
+                    Debug.Log($"[PackNativePlugins] Skipped (platform mismatch): {fileInfo.Name}");
+                    continue;
+                }
+            }
+
+            // Determine output subdirectory:
+            // If the source file is already in a RID-named subfolder, preserve it.
+            // Otherwise, place it under the build target's RID folder.
+            string relativePath = Path.GetRelativePath(pluginsSource, file);
+            string outputDir;
+
+            // Check if the first directory component is a RID (e.g., "win-x64/foo.dll")
+            string firstDir = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+            if (IsKnownRid(firstDir) && firstDir != Path.GetFileName(file))
+            {
+                // Already in a RID subfolder — copy preserving structure
+                outputDir = Path.Combine(dataPath, "Plugins", Path.GetDirectoryName(relativePath)!);
+            }
+            else
+            {
+                // No RID subfolder — place into the target RID
+                outputDir = Path.Combine(dataPath, "Plugins", rid);
+            }
+
+            Directory.CreateDirectory(outputDir);
+            string destFile = Path.Combine(outputDir, Path.GetFileName(file));
+            File.Copy(file, destFile, overwrite: true);
+            count++;
+            Debug.Log($"[PackNativePlugins] Copied: {relativePath} → Plugins/{Path.GetRelativePath(Path.Combine(dataPath, "Plugins"), destFile)}");
+        }
+
+        if (count > 0)
+            Debug.Log($"[PackNativePlugins] Packed {count} native plugin(s) for {rid}.");
+    }
+
+    private static readonly HashSet<string> s_knownRidPrefixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "win", "linux", "osx", "freebsd", "android", "ios", "browser"
+    };
+
+    private static bool IsKnownRid(string name)
+    {
+        int dash = name.IndexOf('-');
+        return dash > 0 && s_knownRidPrefixes.Contains(name.AsSpan(0, dash).ToString());
     }
 
 

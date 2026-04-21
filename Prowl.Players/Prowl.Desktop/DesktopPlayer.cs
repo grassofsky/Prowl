@@ -1,5 +1,6 @@
 ﻿using Prowl.Runtime;
 using Prowl.Runtime.SceneManagement;
+using Prowl.Runtime.Utils;
 using Prowl.Echo;
 
 namespace Prowl.Desktop;
@@ -13,6 +14,10 @@ public static class DesktopPlayer
         Application.DataPath = Data.FullName;
 
         Application.IsPlaying = true;
+
+        // Initialize native plugin resolver before loading game assemblies
+        // so [DllImport] in game scripts can find plugins in GameData/Plugins/
+        NativePluginResolver.Initialize();
 
         AssemblyManager.LoadProjectAssemblies();
 

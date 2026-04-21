@@ -83,6 +83,23 @@ public sealed class Texture2D : Texture
     { }
 
     /// <summary>
+    /// Creates a <see cref="Texture2D"/> from an existing native GPU texture handle.
+    /// The engine does NOT own or manage the lifetime of the native texture — the caller is responsible for disposal.
+    /// Analogous to creating a Unity Texture2D from Texture.GetNativeTexturePtr().
+    /// </summary>
+    /// <param name="nativeHandle">The native texture handle (D3D11: ID3D11Texture2D*, Vulkan: VkImage, OpenGL: texture name).</param>
+    /// <param name="description">The texture description matching the native texture's properties.</param>
+    /// <returns>A new Texture2D wrapping the native handle. OwnsTexture will be false.</returns>
+    public static Texture2D CreateFromNativeHandle(ulong nativeHandle, TextureDescription description)
+    {
+        if (nativeHandle == 0)
+            throw new ArgumentException("Native texture handle must not be zero.", nameof(nativeHandle));
+
+        var veldridTexture = Graphics.Factory.CreateTexture(nativeHandle, description);
+        return new Texture2D(veldridTexture);
+    }
+
+    /// <summary>
     /// Sets the data of an area of the <see cref="Texture2D"/>.
     /// </summary>
     /// <param name="ptr">The pointer from which the pixel data will be read.</param>

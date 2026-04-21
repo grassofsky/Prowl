@@ -502,6 +502,11 @@ public static partial class AssetDatabase
             else
             {
                 // Sub Asset
+                if (fileID - 1 >= serialized.SubAssets.Count)
+                {
+                    Debug.LogWarning($"[AssetDatabase] SubAsset index {fileID - 1} out of range (count={serialized.SubAssets.Count}) for asset {assetGuid}");
+                    return null;
+                }
                 if (serialized.SubAssets[fileID - 1] is not T) return null;
                 asset = (T)serialized.SubAssets[fileID - 1];
             }

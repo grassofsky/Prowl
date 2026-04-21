@@ -17,6 +17,12 @@ public class ScriptableRenderContext : IDisposable
     private CullingResults _cullingResults;
     private Framebuffer _currentFramebuffer;
 
+    /// <summary>
+    /// The active renderer for this frame. Set by <see cref="ScriptableRenderer.Render"/> before features execute.
+    /// RenderFeatures can use this to query renderer-specific state (e.g. color targets).
+    /// </summary>
+    public ScriptableRenderer Renderer { get; internal set; }
+
     public ScriptableRenderContext()
     {
         _passes = new List<RenderPass>();

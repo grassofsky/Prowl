@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
 using Prowl.Echo;
@@ -63,6 +64,9 @@ public static class AssemblyManager
     {
         OnAssemblyUnloadAttribute.FindAll();
         OnAssemblyLoadAttribute.FindAll();
+
+        // Initialize native plugin resolver so [DllImport] in engine code also resolves via Plugins/
+        Utils.NativePluginResolver.Initialize();
     }
 
 
@@ -131,6 +135,8 @@ public static class AssemblyManager
         AssemblyMethodAttributeBase.Clear();
 
         Echo.Serializer.ClearCache();
+
+        Utils.NativePluginResolver.Invalidate();
 
         InvokeUnloadDelegate();
 
@@ -261,6 +267,24 @@ public static class AssemblyManager
             }
 
             return null;
+        }
+
+
+        protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
+        {
+            // Try to resolve from Plugins/ directories via the centralized resolver
+            if (Utils.NativePluginResolver.TryLoadLibrary(unmanagedDllName, out IntPtr handle))
+                return handle;
+
+            // Also try dependency resolvers (e.g. deps.json entries)
+            foreach (var resolver in _assemblyDependencyResolvers)
+            {
+                string? resolvedPath = resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
+                if (resolvedPath != null && NativeLibrary.TryLoad(resolvedPath, out handle))
+                    return handle;
+            }
+
+            return IntPtr.Zero;
         }
     }
 }

@@ -23,6 +23,10 @@ public abstract class PropertyDrawerEnumerable<T> : PropertyDrawer where T : cla
     protected abstract void SetElement(T value, int index, object element);
     protected abstract void RemoveElement(ref T value, int index);
     protected abstract void AddElement(ref T value);
+    protected virtual void AddElementOfType(ref T value, Type concreteType)
+    {
+        AddElement(ref value);
+    }
 
     public override bool PropertyLayout(Gui gui, string label, int index, Type propertyType, ref object? propertyValue, EditorGUI.PropertyGridConfig config, List<Attribute>? attributes = null)
     {
@@ -138,18 +142,50 @@ public abstract class PropertyDrawerEnumerable<T> : PropertyDrawer where T : cla
 
                             if (allowResize)
                             {
+                                var elemType = ElementType(list);
+                                bool isPolymorphic = elemType.IsAbstract || elemType.IsInterface;
+
                                 using (gui.Node("AddBtn").Scale(EditorStylePrefs.Instance.ItemSize).Enter())
                                 {
                                     if (gui.IsNodePressed())
                                     {
-                                        AddElement(ref list);
-                                        changed = true;
+                                        if (isPolymorphic)
+                                        {
+                                            gui.OpenPopup("AddElement_TypePicker");
+                                        }
+                                        else
+                                        {
+                                            AddElement(ref list);
+                                            changed = true;
+                                        }
                                     }
                                     else if (gui.IsNodeHovered())
                                     {
                                         gui.Draw2D.DrawRectFilled(gui.CurrentNode.LayoutData.Rect, EditorStylePrefs.Instance.Hovering);
                                     }
                                     gui.Draw2D.DrawText(FontAwesome6.Plus, gui.CurrentNode.LayoutData.Rect);
+
+                                    if (isPolymorphic && gui.BeginPopup("AddElement_TypePicker", out var popupNode, false, EditorGUI.InputStyle))
+                                        using (popupNode.Width(250).FitContentHeight().Layout(LayoutType.Column).Padding(5).Enter())
+                                        {
+                                            var concreteTypes = RuntimeUtils.FindTypesImplementing(elemType, true);
+                                            if (concreteTypes.Count > 0)
+                                            {
+                                                foreach (var t in concreteTypes)
+                                                {
+                                                    if (EditorGUI.StyledButton(t.Name))
+                                                    {
+                                                        AddElementOfType(ref list, t);
+                                                        changed = true;
+                                                        gui.CloseAllPopups();
+                                                    }
+                                                }
+                                            }
+                                            else
+                                            {
+                                                gui.TextNode("NoTypes", "No concrete types found").ExpandWidth().Height(EditorStylePrefs.Instance.ItemSize);
+                                            }
+                                        }
                                 }
 
                                 using (gui.Node("RemoveBtn").Scale(EditorStylePrefs.Instance.ItemSize).Enter())
@@ -276,7 +312,14 @@ public class PropertyDrawerList : PropertyDrawerEnumerable<System.Collections.IL
     protected override void AddElement(ref System.Collections.IList value)
     {
         var elementType = value.GetType().GetGenericArguments()[0];
+        if (elementType.IsAbstract || elementType.IsInterface)
+            return; // Handled by AddElementOfType via popup
         var element = Activator.CreateInstance(elementType);
+        value.Add(element);
+    }
+    protected override void AddElementOfType(ref System.Collections.IList value, Type concreteType)
+    {
+        var element = Activator.CreateInstance(concreteType);
         value.Add(element);
     }
 }
