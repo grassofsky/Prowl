@@ -19,6 +19,12 @@ A clear and concise description of any alternative solutions or features you've 
 **Target module**
 Which area should this feature touch first? (example: Runtime, Editor, Desktop Player, Rendering/SRP)
 
+**Priority**
+Suggested priority: P0 (blocker), P1 (must-have), P2 (should-have), P3 (nice-to-have)
+
+**Backlog ID**
+If a corresponding `agent/backlog/` entry exists, put its ID here (e.g. `rendering-001`). Leave blank if none.
+
 **Validation plan**
 How should this feature be verified? Include commands, tests, or manual editor flow.
 

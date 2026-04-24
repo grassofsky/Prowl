@@ -48,10 +48,12 @@ Severity levels: 🔴 Critical → 🟡 Major → 🔵 Suggestion
 ## Approach
 
 1. **Gather context**: Use the Explore subagent to read relevant source files in parallel
-2. **Map the architecture**: Identify call chains, ownership boundaries, and data flow
-3. **Identify issues**: Categorize findings by severity with specific file/line references
-4. **Recommend fixes**: Describe what to change (not how to write the code), with rationale
-5. **Assess impact**: Note which changes are safe/isolated vs. which have broad ripple effects
+2. **Check backlog**: Read `agent/backlog/{id}.md` if a specific feature is being reviewed — verify AC and scope boundaries
+3. **Map the architecture**: Identify call chains, ownership boundaries, and data flow
+4. **Identify issues**: Categorize findings by severity with specific file/line references
+5. **Check test coverage**: Consult `agent/test-matrix.md` — flag if changed modules lack tests at the required level
+6. **Recommend fixes**: Describe what to change (not how to write the code), with rationale
+7. **Assess impact**: Note which changes are safe/isolated vs. which have broad ripple effects
 
 ## Output Format
 
